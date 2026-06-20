@@ -8,6 +8,8 @@ interface HomePageProps {
   onNavigate(tab: TabId): void;
 }
 
+const assetPath = `${import.meta.env.BASE_URL}illustrations/mechanism_overview.png`;
+
 export function HomePage({ episodes, settings, onNavigate }: HomePageProps) {
   return (
     <div className="page-stack home-page">
@@ -18,7 +20,7 @@ export function HomePage({ episodes, settings, onNavigate }: HomePageProps) {
           <p>Capture regret. Replay it at temptation.</p>
         </div>
         <div className="mechanism-frame" aria-label="Mechanism overview">
-          <img src="/illustrations/mechanism_overview.png" alt="Mechanism overview" />
+          <img src={assetPath} alt="Mechanism overview" />
         </div>
       </section>
 

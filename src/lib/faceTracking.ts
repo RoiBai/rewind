@@ -76,6 +76,8 @@ const hostedModel =
   'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task';
 const hostedHandModel =
   'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task';
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+const localAsset = (path: string) => `${basePath}${path}`;
 
 export async function createFaceTracker(): Promise<FaceTracker> {
   try {
@@ -87,13 +89,15 @@ export async function createFaceTracker(): Promise<FaceTracker> {
       handModel?: string;
     }> = [];
 
-    if (await assetExists('/mediapipe/face_landmarker.task')) {
-      const hasLocalHands = await assetExists('/mediapipe/hand_landmarker.task');
+    const localFaceModel = localAsset('/mediapipe/face_landmarker.task');
+    const localHandModel = localAsset('/mediapipe/hand_landmarker.task');
+    if (await assetExists(localFaceModel)) {
+      const hasLocalHands = await assetExists(localHandModel);
       attempts.push({
         source: 'mediapipe-local',
-        wasm: '/mediapipe/wasm',
-        faceModel: '/mediapipe/face_landmarker.task',
-        handModel: hasLocalHands ? '/mediapipe/hand_landmarker.task' : undefined
+        wasm: localAsset('/mediapipe/wasm'),
+        faceModel: localFaceModel,
+        handModel: hasLocalHands ? localHandModel : undefined
       });
     }
 
