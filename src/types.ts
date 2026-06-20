@@ -8,6 +8,7 @@ export interface FaceSample {
   blinkRight: number;
   yaw: number;
   pitch: number;
+  faceScale?: number;
 }
 
 export interface Episode {

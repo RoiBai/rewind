@@ -10,6 +10,7 @@ export interface CatExpression {
   blinkRight: number;
   yaw: number;
   pitch: number;
+  faceScale: number;
   smile: number;
   leftHandRaise: number;
   rightHandRaise: number;
@@ -48,6 +49,7 @@ export const neutralExpression: CatExpression = {
   blinkRight: 0,
   yaw: 0,
   pitch: 0,
+  faceScale: 0,
   smile: 0,
   leftHandRaise: 0,
   rightHandRaise: 0,
@@ -254,6 +256,9 @@ function getFeatureAlpha(key: keyof CatExpression, alpha: number) {
   if (key === 'mouthOpen' || key === 'smile') {
     return clamp(alpha * 1.55, 0.12, 0.62);
   }
+  if (key === 'faceScale') {
+    return clamp(alpha * 1.12, 0.12, 0.46);
+  }
   if (key.includes('Cover')) {
     return clamp(alpha * 0.86, 0.08, 0.42);
   }
@@ -270,7 +275,8 @@ export function toFaceSample(expression: CatExpression, elapsedMs: number): Face
     blinkLeft: roundFeature(expression.blinkLeft),
     blinkRight: roundFeature(expression.blinkRight),
     yaw: roundFeature(expression.yaw),
-    pitch: roundFeature(expression.pitch)
+    pitch: roundFeature(expression.pitch),
+    faceScale: roundFeature(expression.faceScale)
   };
 }
 
@@ -311,6 +317,7 @@ function expressionFromResult(result: any): CatExpression | null {
     blinkRight: clamp(blinkLeft),
     yaw: clamp(pose.yaw * 1.18, -1, 1),
     pitch: clamp(pose.pitch * 1.35, -1, 1),
+    faceScale: faceScaleFromLandmarks(landmarks),
     smile: clamp(smile)
   };
 }
@@ -365,6 +372,21 @@ function smileFromLandmarks(landmarks: Landmark[]) {
   const cornerLift = (mouthCenter.y - (leftCorner.y + rightCorner.y) / 2) / faceHeight;
   const width = distance(leftCorner, rightCorner) / faceWidth;
   return clamp((width - 0.36) * 2.4 + (cornerLift - 0.01) * 7.2);
+}
+
+function faceScaleFromLandmarks(landmarks: Landmark[]) {
+  const forehead = landmarks[10];
+  const chin = landmarks[152];
+  const leftCheek = landmarks[234];
+  const rightCheek = landmarks[454];
+  if (!forehead || !chin || !leftCheek || !rightCheek) {
+    return 0;
+  }
+
+  const faceHeight = distance(forehead, chin);
+  const faceWidth = distance(leftCheek, rightCheek);
+  const faceSize = Math.max(faceHeight, faceWidth * 1.08);
+  return clamp((faceSize - 0.44) / 0.28, -1, 1);
 }
 
 function blinkFromLandmarks(landmarks: Landmark[], side: 'left' | 'right') {

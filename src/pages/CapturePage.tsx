@@ -1,6 +1,6 @@
 import { Camera, CircleStop, Save, Video } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { UnityAvatarStage } from '../components/UnityAvatarStage';
+import { UnityAvatarStage, type UnityAvatarStageHandle } from '../components/UnityAvatarStage';
 import { createId, getErrorDetail, putVideoBlob, saveEpisode, updateEpisode } from '../db';
 import { createReplayClipPlaceholder } from '../lib/encoding';
 import {
@@ -20,8 +20,10 @@ interface CapturePageProps {
 
 export function CapturePage({ onSaved }: CapturePageProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const avatarRef = useRef<UnityAvatarStageHandle | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const avatarRecordingStreamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const timerRef = useRef<number | undefined>();
   const faceTimerRef = useRef<number | undefined>();
@@ -72,6 +74,7 @@ export function CapturePage({ onSaved }: CapturePageProps) {
   useEffect(() => {
     return () => {
       stopRecording();
+      cleanupAvatarRecordingStream();
       stopFaceLoop();
       stopStream(streamRef.current);
       if (timerRef.current) {
@@ -102,7 +105,7 @@ export function CapturePage({ onSaved }: CapturePageProps) {
 
     streamRef.current = nextStream;
     setStream(nextStream);
-    setStatus('Local preview');
+    setStatus('Tracking preview');
     void startFaceLoop();
     return nextStream;
   }
@@ -120,12 +123,21 @@ export function CapturePage({ onSaved }: CapturePageProps) {
       return;
     }
 
+    let recordingStream: MediaStream;
+    try {
+      recordingStream = createAvatarRecordingStream(mediaStream);
+      avatarRecordingStreamRef.current = recordingStream;
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Avatar recorder unavailable');
+      return;
+    }
+
     chunksRef.current = [];
     faceTraceRef.current = [];
     setRecordedBlob(null);
     setElapsedSec(0);
 
-    const recorder = new MediaRecorder(mediaStream, mimeType ? { mimeType } : undefined);
+    const recorder = new MediaRecorder(recordingStream, mimeType ? { mimeType } : undefined);
     recorderRef.current = recorder;
     recorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
@@ -133,6 +145,7 @@ export function CapturePage({ onSaved }: CapturePageProps) {
       }
     };
     recorder.onstop = async () => {
+      cleanupAvatarRecordingStream();
       const firstChunk = chunksRef.current[0] as Blob | undefined;
       const blob = new Blob(chunksRef.current, { type: mimeType || firstChunk?.type || 'video/webm' });
       setRecordedBlob(blob);
@@ -140,7 +153,7 @@ export function CapturePage({ onSaved }: CapturePageProps) {
       if (duration > 0) {
         setElapsedSec(duration);
       }
-      setStatus('Ready to save');
+      setStatus('Avatar ready');
     };
 
     startedAtRef.current = performance.now();
@@ -148,7 +161,7 @@ export function CapturePage({ onSaved }: CapturePageProps) {
     lastFaceVideoTimeRef.current = -1;
     recordingRef.current = true;
     setIsRecording(true);
-    setStatus('Recording');
+    setStatus('Recording avatar');
     recorder.start(2000);
 
     timerRef.current = window.setInterval(() => {
@@ -161,6 +174,8 @@ export function CapturePage({ onSaved }: CapturePageProps) {
   function stopRecording() {
     if (recorderRef.current?.state === 'recording') {
       recorderRef.current.stop();
+    } else {
+      cleanupAvatarRecordingStream();
     }
     recordingRef.current = false;
     setIsRecording(false);
@@ -168,6 +183,30 @@ export function CapturePage({ onSaved }: CapturePageProps) {
       window.clearInterval(timerRef.current);
       timerRef.current = undefined;
     }
+  }
+
+  function createAvatarRecordingStream(micStream: MediaStream) {
+    if (!avatarRef.current?.isReady()) {
+      throw new Error('Wait for Unity ready');
+    }
+
+    const canvas = avatarRef.current.getCanvas();
+    if (!canvas || typeof canvas.captureStream !== 'function') {
+      throw new Error('Avatar recording not supported');
+    }
+
+    const canvasStream = canvas.captureStream(30);
+    const videoTracks = canvasStream.getVideoTracks();
+    if (videoTracks.length === 0) {
+      throw new Error('Avatar video unavailable');
+    }
+
+    return new MediaStream([...videoTracks, ...micStream.getAudioTracks()]);
+  }
+
+  function cleanupAvatarRecordingStream() {
+    avatarRecordingStreamRef.current?.getVideoTracks().forEach((track) => track.stop());
+    avatarRecordingStreamRef.current = null;
   }
 
   function stopFaceLoop() {
@@ -326,10 +365,14 @@ export function CapturePage({ onSaved }: CapturePageProps) {
               Enable Camera
             </button>
           )}
-          <div className="media-chip">Local camera</div>
+          <div className="media-chip">Tracking only</div>
         </div>
 
-        <UnityAvatarStage expression={expression} label={isRecording ? 'Unity mirroring cat' : 'Unity cat avatar'} />
+        <UnityAvatarStage
+          ref={avatarRef}
+          expression={expression}
+          label={isRecording ? 'Recording cat avatar' : 'Unity cat avatar'}
+        />
       </section>
 
       <section className="panel compact-panel">
@@ -343,7 +386,7 @@ export function CapturePage({ onSaved }: CapturePageProps) {
             <span className="soft-pill">
               S{expression.smile.toFixed(2)} B{Math.round(expression.blinkLeft * 10)}/
               {Math.round(expression.blinkRight * 10)} M{Math.round(expression.mouthOpen * 10)}
-              {' '}· G {handGestureLabel(expression, 'left')}/{handGestureLabel(expression, 'right')}
+              {' '}Z{expression.faceScale.toFixed(2)} · G {handGestureLabel(expression, 'left')}/{handGestureLabel(expression, 'right')}
             </span>
           )}
         </div>
@@ -372,7 +415,7 @@ export function CapturePage({ onSaved }: CapturePageProps) {
         {!isRecording ? (
           <button className="primary-button" type="button" onClick={() => void startRecording()} disabled={isEncoding}>
             <Video size={19} aria-hidden="true" />
-            Start Recording
+            Record Avatar
           </button>
         ) : (
           <button className="danger-button" type="button" onClick={stopRecording}>

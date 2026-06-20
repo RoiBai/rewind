@@ -13,6 +13,8 @@ public sealed class RewindWebAvatarController : MonoBehaviour
     public float headPitchDegrees = 34f;
     public float headRollDegrees = 22f;
     public float smoothing = 12f;
+    public float closeFaceZoom = 0.34f;
+    public float farFaceZoom = 0.22f;
 
     private readonly TrackingPacket target = new TrackingPacket();
     private readonly TrackingPacket current = new TrackingPacket();
@@ -28,6 +30,9 @@ public sealed class RewindWebAvatarController : MonoBehaviour
     private Light keyLight;
     private Light fillLight;
     private Light rimLight;
+    private Camera avatarCamera;
+    private float baseOrthographicSize = 0.98f;
+    private Vector3 baseAvatarScale = Vector3.one;
     private string lookMode = "official";
 
     private void Awake()
@@ -37,6 +42,7 @@ public sealed class RewindWebAvatarController : MonoBehaviour
             catRoot = gameObject;
         }
 
+        baseAvatarScale = catRoot.transform.localScale;
         animator = catRoot.GetComponentInChildren<Animator>();
         CacheRestPose();
         CacheHumanBones();
@@ -45,6 +51,7 @@ public sealed class RewindWebAvatarController : MonoBehaviour
         CacheBakedPoses();
         HideNonWebMeshes();
         CacheLookTargets();
+        CacheCamera();
         ApplyLookMode();
     }
 
@@ -144,6 +151,7 @@ public sealed class RewindWebAvatarController : MonoBehaviour
         ApplyFace();
         ApplyHead();
         ApplyHands();
+        ApplyFraming();
     }
 
     private void CacheRestPose()
@@ -358,6 +366,15 @@ public sealed class RewindWebAvatarController : MonoBehaviour
     {
         var item = GameObject.Find(name);
         return item == null ? null : item.GetComponent<Light>();
+    }
+
+    private void CacheCamera()
+    {
+        avatarCamera = Camera.main ?? FindObjectOfType<Camera>();
+        if (avatarCamera != null && avatarCamera.orthographic)
+        {
+            baseOrthographicSize = avatarCamera.orthographicSize;
+        }
     }
 
     private void ApplyLookMode()
@@ -613,6 +630,32 @@ public sealed class RewindWebAvatarController : MonoBehaviour
         RotateLocal(chest, pitch * 0.12f, yaw * 0.08f, roll * 0.08f);
         RotateLocal(neck, pitch * 0.34f, yaw * 0.30f, roll * 0.24f);
         RotateLocal(head, pitch * 0.54f, yaw * 0.62f, roll * 0.68f);
+    }
+
+    private void ApplyFraming()
+    {
+        if (avatarCamera == null || !avatarCamera.orthographic)
+        {
+            return;
+        }
+
+        var proximity = Mathf.Clamp(current.faceScale, -1f, 1f);
+        var zoom = proximity >= 0f
+            ? 1f - proximity * closeFaceZoom
+            : 1f + -proximity * farFaceZoom;
+        var targetSize = Mathf.Clamp(baseOrthographicSize * zoom, baseOrthographicSize * 0.62f, baseOrthographicSize * 1.28f);
+        avatarCamera.orthographicSize = Mathf.Lerp(
+            avatarCamera.orthographicSize,
+            targetSize,
+            1f - Mathf.Exp(-8f * Time.deltaTime));
+
+        var avatarScale = proximity >= 0f
+            ? 1f + proximity * 0.34f
+            : 1f - -proximity * 0.18f;
+        catRoot.transform.localScale = Vector3.Lerp(
+            catRoot.transform.localScale,
+            baseAvatarScale * Mathf.Clamp(avatarScale, 0.78f, 1.40f),
+            1f - Mathf.Exp(-8f * Time.deltaTime));
     }
 
     private void ApplyHands()
@@ -1128,6 +1171,7 @@ public sealed class RewindWebAvatarController : MonoBehaviour
         public float yaw;
         public float pitch;
         public float roll;
+        public float faceScale;
         public float leftHandRaise;
         public float rightHandRaise;
         public float leftHandX;
@@ -1158,6 +1202,7 @@ public sealed class RewindWebAvatarController : MonoBehaviour
             yaw = other.yaw;
             pitch = other.pitch;
             roll = other.roll;
+            faceScale = other.faceScale;
             leftHandRaise = other.leftHandRaise;
             rightHandRaise = other.rightHandRaise;
             leftHandX = other.leftHandX;
@@ -1184,6 +1229,7 @@ public sealed class RewindWebAvatarController : MonoBehaviour
             yaw = Mathf.Lerp(yaw, other.yaw, alpha);
             pitch = Mathf.Lerp(pitch, other.pitch, alpha);
             roll = Mathf.Lerp(roll, other.roll, alpha);
+            faceScale = Mathf.Lerp(faceScale, other.faceScale, alpha);
             leftHandRaise = Mathf.Lerp(leftHandRaise, other.leftHandRaise, alpha);
             rightHandRaise = Mathf.Lerp(rightHandRaise, other.rightHandRaise, alpha);
             leftHandX = Mathf.Lerp(leftHandX, other.leftHandX, alpha);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { CatExpression, neutralExpression } from '../lib/faceTracking';
 
 interface UnityAvatarStageProps {
@@ -10,6 +10,11 @@ interface UnityAvatarStageProps {
 }
 
 export type UnityLookMode = 'official' | 'stable';
+
+export interface UnityAvatarStageHandle {
+  getCanvas(): HTMLCanvasElement | null;
+  isReady(): boolean;
+}
 
 interface UnityInstance {
   SendMessage(gameObject: string, method: string, value?: string): void;
@@ -26,6 +31,7 @@ interface PosePacket {
   yaw?: number;
   pitch?: number;
   roll?: number;
+  faceScale?: number;
   leftHandRaise?: number;
   rightHandRaise?: number;
   leftHandX?: number;
@@ -42,23 +48,29 @@ interface PosePacket {
 
 const BUILD_ROOT = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/unity/rewind-avatar`;
 const BUILD_NAME = 'rewind-avatar';
-const BUILD_VERSION = 'unity-v88-mobile-angle-idle-arms-20260621';
+const BUILD_VERSION = 'unity-v90-avatar-recording-root-zoom-20260621';
 const UNITY_OBJECT = 'RewindAvatar';
 
-export function UnityAvatarStage({
+export const UnityAvatarStage = forwardRef<UnityAvatarStageHandle, UnityAvatarStageProps>(function UnityAvatarStage({
   expression = neutralExpression,
   poseClip = 'RigLab_Neutral',
   lookMode = 'official',
   className = '',
   label = 'Unity cat avatar'
-}: UnityAvatarStageProps) {
+}: UnityAvatarStageProps, ref) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const unityRef = useRef<UnityInstance | null>(null);
+  const readyRef = useRef(false);
   const expressionRef = useRef(expression);
   const poseClipRef = useRef(poseClip);
   const lookModeRef = useRef<UnityLookMode>(lookMode);
   const [status, setStatus] = useState('Loading Unity');
   const [progress, setProgress] = useState(0);
+
+  useImperativeHandle(ref, () => ({
+    getCanvas: () => canvasRef.current,
+    isReady: () => readyRef.current
+  }), []);
 
   useEffect(() => {
     expressionRef.current = expression;
@@ -122,6 +134,7 @@ export function UnityAvatarStage({
         }
 
         unityRef.current = unity;
+        readyRef.current = true;
         unity.SendMessage(UNITY_OBJECT, 'SetLookMode', lookModeRef.current);
         setStatus('Unity ready');
 
@@ -137,6 +150,7 @@ export function UnityAvatarStage({
         };
         sendFrame = window.requestAnimationFrame(sendLoop);
       } catch (error) {
+        readyRef.current = false;
         setStatus(error instanceof Error ? error.message : 'Unity failed');
       }
     }
@@ -150,6 +164,7 @@ export function UnityAvatarStage({
       }
       const unity = unityRef.current;
       unityRef.current = null;
+      readyRef.current = false;
       if (unity) {
         void unity.Quit();
       }
@@ -168,7 +183,7 @@ export function UnityAvatarStage({
       <div className="cat-avatar__badge">{status === 'Unity ready' ? 'Unity ready' : status}</div>
     </div>
   );
-}
+});
 
 function sendTracking(unity: UnityInstance, expression: CatExpression, poseClip: string) {
   unity.SendMessage(UNITY_OBJECT, 'ApplyTrackingJson', JSON.stringify(toTrackingPacket(expression, poseClip)));
@@ -188,6 +203,7 @@ function toTrackingPacket(expression: CatExpression, poseClip: string) {
     yaw: pose.yaw ?? expression.yaw,
     pitch: pose.pitch ?? expression.pitch,
     roll: pose.roll ?? 0,
+    faceScale: pose.faceScale ?? expression.faceScale,
     leftHandRaise: Math.max(expression.leftHandRaise, pose.leftHandRaise ?? 0),
     rightHandRaise: Math.max(expression.rightHandRaise, pose.rightHandRaise ?? 0),
     leftHandX: pose.leftHandX ?? expression.leftHandX,

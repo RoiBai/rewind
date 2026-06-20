@@ -51,6 +51,7 @@ const sliders: SliderConfig[] = [
   { key: 'blinkRight', label: 'Blink R' },
   { key: 'yaw', label: 'Yaw', min: -1, max: 1 },
   { key: 'pitch', label: 'Pitch', min: -1, max: 1 },
+  { key: 'faceScale', label: 'Zoom', min: -1, max: 1 },
   { key: 'leftHandRaise', label: 'Left arm' },
   { key: 'rightHandRaise', label: 'Right arm' }
 ];
