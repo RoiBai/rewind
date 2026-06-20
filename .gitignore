@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.tmp/
+debug.log
+cat_*.png
+tools/__pycache__/
+
+# Unity WebGL data is larger than GitHub's single-file limit.
+# Keep the local file for development; commit the split parts instead.
+public/unity/rewind-avatar/Build/rewind-avatar.data
+
+# Local Three.js model exports are kept for debugging, but GitHub blocks
+# files over 100MB. The deployed prototype uses the Unity WebGL build.
+public/assets/cat/*.glb
