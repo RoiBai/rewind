@@ -30,7 +30,7 @@ const page = await browser.newPage({ viewport: { width: 390, height: 844 }, devi
 const url = `${baseUrl}/?preset=neutral&fur=${fur}&rig=${rig}&look=${look}#rig`;
 await page.goto(url, { waitUntil: 'networkidle' });
 await page.locator('.rig-lab__avatar canvas').waitFor({ state: 'visible', timeout: 30000 });
-await page.getByText('Unity v94', { exact: true }).waitFor({ state: 'visible', timeout: 90000 });
+await page.getByText('Unity v95', { exact: true }).waitFor({ state: 'visible', timeout: 90000 });
 await page.waitForTimeout(3500);
 
 for (const pose of poses) {
@@ -41,7 +41,7 @@ for (const pose of poses) {
     await page.getByText('0 Reset', { exact: true }).click();
   } else {
     await page.goto(`${baseUrl}/?preset=${pose}&fur=${fur}&rig=${rig}&look=${look}#rig`, { waitUntil: 'networkidle' });
-    await page.getByText('Unity v94', { exact: true }).waitFor({ state: 'visible', timeout: 90000 });
+    await page.getByText('Unity v95', { exact: true }).waitFor({ state: 'visible', timeout: 90000 });
   }
   await page.waitForTimeout(1400);
   await page.locator('.rig-lab__avatar').screenshot({ path: path.join(outDir, `${pose}.png`) });

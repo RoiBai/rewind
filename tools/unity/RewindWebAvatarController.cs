@@ -11,9 +11,9 @@ public sealed class RewindWebAvatarController : MonoBehaviour
     private const float RuntimeFarFaceZoom = 0.16f;
     private const float RuntimeMaxAvatarScale = 1.12f;
     private const float RuntimeCloseFaceYOffset = 0f;
-    private const float RuntimeCloseCameraSize = 0.38f;
+    private const float RuntimeCloseCameraSize = 0.54f;
     private const float RuntimeFarCameraSize = 1.08f;
-    private const float RuntimeCloseCameraYOffset = 0.42f;
+    private const float RuntimeCloseCameraYOffset = 0.44f;
 
     public GameObject catRoot;
     public float faceAmplifier = 1.02f;
