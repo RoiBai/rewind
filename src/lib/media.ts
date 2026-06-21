@@ -14,6 +14,22 @@ export function getSupportedVideoMimeType() {
   return candidates.find((type) => MediaRecorder.isTypeSupported(type)) ?? '';
 }
 
+export function getSupportedAudioMimeType() {
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4;codecs=mp4a.40.2',
+    'audio/mp4',
+    'audio/aac'
+  ];
+
+  if (!('MediaRecorder' in window)) {
+    return '';
+  }
+
+  return candidates.find((type) => MediaRecorder.isTypeSupported(type)) ?? '';
+}
+
 export function formatDuration(seconds: number) {
   if (!Number.isFinite(seconds) || seconds < 0) {
     return '0:00';

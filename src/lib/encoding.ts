@@ -23,6 +23,7 @@ interface EpisodeDraftInput {
   transcriptText: string;
   transcriptCues?: TranscriptCue[];
   faceTrace?: FaceSample[];
+  audioBlob?: Blob | null;
   durationSec: number;
   createdAt: Date;
   onProgress?: (progress: number) => void;
@@ -31,6 +32,7 @@ interface EpisodeDraftInput {
 export interface EpisodeDraft {
   title: string;
   tags: string[];
+  transcriptText?: string;
   aiSummary: EpisodeAiSummary;
   replaySegments: EpisodeMoment[];
   replayStartSec: number;
@@ -55,7 +57,18 @@ export async function createReplayClipPlaceholder(input: PlaceholderEncodingInpu
 }
 
 export async function createEpisodeDraft(input: EpisodeDraftInput): Promise<EpisodeDraft> {
-  for (const progress of [0.2, 0.46, 0.74, 1]) {
+  for (const progress of [0.16, 0.28]) {
+    await wait(170);
+    input.onProgress?.(progress);
+  }
+
+  const remoteDraft = await createRemoteEpisodeDraft(input);
+  if (remoteDraft) {
+    input.onProgress?.(1);
+    return remoteDraft;
+  }
+
+  for (const progress of [0.46, 0.74, 1]) {
     await wait(170);
     input.onProgress?.(progress);
   }
@@ -81,6 +94,7 @@ export async function createEpisodeDraft(input: EpisodeDraftInput): Promise<Epis
   return {
     title,
     tags,
+    transcriptText: transcript,
     replaySegments: moments,
     replayStartSec: 0,
     replayEndSec,
@@ -95,6 +109,136 @@ export async function createEpisodeDraft(input: EpisodeDraftInput): Promise<Epis
       pipeline: 'local-stub'
     }
   };
+}
+
+interface RemoteEpisodeDraftResponse {
+  title?: string;
+  tags?: string[];
+  transcriptText?: string;
+  aiSummary?: EpisodeAiSummary;
+  replaySegments?: EpisodeMoment[];
+  replayStartSec?: number;
+  replayEndSec?: number;
+}
+
+async function createRemoteEpisodeDraft(input: EpisodeDraftInput): Promise<EpisodeDraft | null> {
+  if (!input.audioBlob || input.audioBlob.size === 0 || !shouldUseRemoteAi()) {
+    return null;
+  }
+
+  try {
+    const audioBase64 = await blobToBase64(input.audioBlob);
+    const response = await fetch(`${getAiApiBase()}/api/analyze-episode`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        audioBase64,
+        audioMimeType: input.audioBlob.type || 'audio/webm',
+        durationSec: input.durationSec,
+        localTranscript: input.transcriptText,
+        transcriptCues: input.transcriptCues ?? [],
+        faceTrace: input.faceTrace ?? []
+      })
+    });
+
+    if (!response.ok) {
+      console.warn('Remote Rewind AI failed.', response.status);
+      return null;
+    }
+
+    const data = (await response.json()) as RemoteEpisodeDraftResponse;
+    return normalizeRemoteDraft(data, input);
+  } catch (error) {
+    console.warn('Remote Rewind AI skipped.', error);
+    return null;
+  }
+}
+
+function normalizeRemoteDraft(data: RemoteEpisodeDraftResponse, input: EpisodeDraftInput): EpisodeDraft | null {
+  const transcript = normalizeTranscript(
+    data.transcriptText || input.transcriptText || input.transcriptCues?.map((cue) => cue.text).join(' ') || ''
+  );
+  const language = data.aiSummary?.language ?? detectLanguage(transcript);
+  const topic = normalizeTranscript(data.aiSummary?.topic ?? inferTopic(transcript, language));
+  const fallbackTitle = inferTitle(topic, input.createdAt, language);
+  const title = normalizeTranscript(data.title ?? data.aiSummary?.title ?? fallbackTitle) || fallbackTitle;
+  const tags = sanitizeTags(data.tags ?? data.aiSummary?.suggestedTags ?? inferTags(transcript, topic, language));
+  const durationSec = Math.max(input.durationSec, 1);
+  const moments = sanitizeMoments(data.replaySegments ?? data.aiSummary?.moments ?? [], durationSec);
+  if (!moments.length) {
+    return null;
+  }
+  const replayStartSec = Math.min(...moments.map((moment) => moment.startSec));
+  const replayEndSec = Math.min(35, Math.max(...moments.map((moment) => moment.endSec)));
+  const summary = normalizeTranscript(data.aiSummary?.summary ?? createSummary(topic, transcript, language));
+  const pipeline = data.aiSummary?.pipeline === 'openai-stt-local-plan' ? 'openai-stt-local-plan' : 'openai-stt-llm';
+
+  return {
+    title,
+    tags,
+    transcriptText: transcript,
+    replaySegments: moments,
+    replayStartSec,
+    replayEndSec,
+    aiSummary: {
+      title,
+      topic,
+      summary,
+      language,
+      suggestedTags: tags,
+      moments,
+      generatedAt: data.aiSummary?.generatedAt ?? new Date().toISOString(),
+      pipeline
+    }
+  };
+}
+
+function shouldUseRemoteAi() {
+  const configuredBase = import.meta.env.VITE_AI_API_BASE?.trim();
+  if (configuredBase) {
+    return true;
+  }
+  return !window.location.hostname.endsWith('github.io');
+}
+
+function getAiApiBase() {
+  return (import.meta.env.VITE_AI_API_BASE?.trim() ?? '').replace(/\/$/, '');
+}
+
+function blobToBase64(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result || '');
+      resolve(value.includes(',') ? value.split(',')[1] : value);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Audio read failed'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function sanitizeTags(tags: string[]) {
+  return [...new Set(tags.map((tag) => normalizeTranscript(tag)).filter(Boolean))].slice(0, 5);
+}
+
+function sanitizeMoments(moments: EpisodeMoment[], durationSec: number) {
+  return moments
+    .map((moment, index) => {
+      const startSec = clamp(Number(moment.startSec), 0, Math.max(durationSec - 0.5, 0));
+      const endSec = clamp(Number(moment.endSec), startSec + 1.2, durationSec);
+      return {
+        id: normalizeTranscript(moment.id) || `moment-${index + 1}`,
+        startSec: roundTime(startSec),
+        endSec: roundTime(endSec),
+        label: normalizeTranscript(moment.label) || `Moment ${index + 1}`,
+        quote: normalizeTranscript(moment.quote),
+        intensity: clamp(Number(moment.intensity), 0.35, 1)
+      };
+    })
+    .filter((moment) => moment.endSec > moment.startSec && moment.quote)
+    .slice(0, 4);
 }
 
 export async function transcribeStub(title: string) {

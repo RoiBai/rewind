@@ -12,7 +12,8 @@ Mobile-first PWA prototype for an HCI study.
 - Unity WebGL cat avatar during recording.
 - MediaPipe face + hand tracking hook with a graceful fallback.
 - Local episode archive in IndexedDB.
-- Stubbed AI draft pipeline for title, topic, tags, and replay moments.
+- Real STT/LLM replay planning on Vercel when `OPENAI_API_KEY` is configured.
+- Local draft fallback for title, topic, tags, and replay moments.
 - Review flow with pre/post desire sliders.
 - Reward variant with treat animation and counter.
 - Local JSON export.
@@ -28,7 +29,7 @@ Mobile-first PWA prototype for an HCI study.
 6. Speak the regret episode.
 7. Stop.
 8. Rewind saves avatar video + voice locally.
-9. Processing creates a draft title, topic, and 30s replay plan.
+9. Processing creates a title, topic, and 20-35s replay plan.
 10. Tap Review Episode to watch and log feedback.
 
 ## Run Locally
@@ -53,24 +54,95 @@ npm run build
 npm run preview
 ```
 
-## Deploy
+## Deploy To Vercel
 
-Vercel:
+This project includes:
 
-```bash
-npm run build
+```text
+vercel.json
+api/analyze-episode.js
 ```
 
-- Framework: Vite
+Vercel settings:
+
+- Framework preset: Vite
 - Build command: `npm run build`
 - Output directory: `dist`
+- Install command: default
+
+Environment variables in Vercel:
+
+```text
+OPENAI_API_KEY=sk-proj-...
+OPENAI_TRANSCRIBE_MODEL=whisper-1
+OPENAI_CLIP_MODEL=gpt-4.1-mini
+REWIND_ALLOWED_ORIGIN=https://www.ruiyuanbai.com
+```
+
+`OPENAI_API_KEY` is required for real STT/LLM replay planning.
+
+Use `whisper-1` for transcription because the replay planner needs segment timestamps. The browser sends an audio-only recording to `/api/analyze-episode`; the full avatar video stays local in IndexedDB.
+
+Local Vercel testing:
+
+```bash
+npm install -g vercel
+vercel dev
+```
+
+Create `.env.local` from `.env.example` before using `vercel dev`.
+
+## Personal Website Path
+
+Target public URL:
+
+```text
+https://www.ruiyuanbai.com/rewind/demo
+```
+
+DNS/custom domains cannot point directly to `/rewind/demo`; DNS only handles domains and subdomains. Use the existing PersonalWebsite Vercel rewrite pattern.
+
+After Rewind is deployed and Vercel gives a URL such as:
+
+```text
+https://rewind-demo.vercel.app
+```
+
+add this to `E:\PersonalWebsite\vercel.json` before the `/(.*)` fallback:
+
+```json
+{
+  "source": "/rewind/demo",
+  "destination": "https://rewind-demo.vercel.app/"
+},
+{
+  "source": "/rewind/demo/",
+  "destination": "https://rewind-demo.vercel.app/"
+},
+{
+  "source": "/rewind/demo/:path*",
+  "destination": "https://rewind-demo.vercel.app/:path*"
+}
+```
+
+Then deploy PersonalWebsite again.
+
+Alternative: use a subdomain such as:
+
+```text
+https://rewind.ruiyuanbai.com
+```
+
+That can be attached directly in the Rewind Vercel project under Settings > Domains.
+
+## Other Static Hosts
 
 Netlify:
 
 - Build command: `npm run build`
 - Publish directory: `dist`
 
-Use HTTPS for camera, microphone, PWA install, and service worker support.
+Use HTTPS for camera, microphone, PWA install, service worker support, and Vercel API calls.
 
 ## Install on iOS
 
@@ -241,24 +313,26 @@ Recorded videos stay in IndexedDB for the MVP. The metadata export references bl
 
 ## AI Encoding Hook
 
-Current MVP:
+Current pipeline:
 
 - Uses the avatar canvas recording as replay media.
-- Stores a 0-35s replay pointer for the TikTok-like review clip.
-- Creates a local draft title, topic, tags, summary, and moment list.
+- Records a small audio-only blob for STT.
+- Sends audio + face trace to `/api/analyze-episode` when available.
+- Uses OpenAI transcription for speech-to-text.
+- Uses GPT clip selection for title, topic, tags, summary, and moment list.
+- Stores a 20-35s replay plan for the TikTok-like review clip.
 - Uses browser speech recognition when available.
-- Falls back to an empty transcript and placeholder moments.
+- Falls back to local transcript and local moment selection if the API is unavailable.
 
-TODO hook:
+Main files:
 
 ```text
 src/lib/encoding.ts
+api/analyze-episode.js
 ```
 
-Replace `createEpisodeDraft` and `createReplayClipPlaceholder` with:
+Future upgrade:
 
-- approved speech-to-text for Chinese and English
-- LLM theme extraction
-- high-intensity sentence selection
 - media trimming or serverless clipping
+- FFmpeg-rendered standalone replay MP4
 - subtitle/caption generation

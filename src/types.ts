@@ -28,7 +28,7 @@ export interface EpisodeAiSummary {
   suggestedTags: string[];
   moments: EpisodeMoment[];
   generatedAt: string;
-  pipeline: 'local-stub';
+  pipeline: 'local-stub' | 'openai-stt-llm' | 'openai-stt-local-plan' | 'remote-fallback';
 }
 
 export interface Episode {

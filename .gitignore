@@ -2,6 +2,9 @@ node_modules/
 dist/
 .tmp/
 debug.log
+.env
+.env.local
+.env.*.local
 cat_*.png
 tools/__pycache__/
 

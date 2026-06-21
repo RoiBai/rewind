@@ -11,7 +11,13 @@ import {
   smoothExpression,
   toFaceSample
 } from '../lib/faceTracking';
-import { formatDuration, getSupportedVideoMimeType, getVideoDurationFromBlob, stopStream } from '../lib/media';
+import {
+  formatDuration,
+  getSupportedAudioMimeType,
+  getSupportedVideoMimeType,
+  getVideoDurationFromBlob,
+  stopStream
+} from '../lib/media';
 import { FaceSample } from '../types';
 import { APP_VERSION_LABEL, UNITY_VERSION_LABEL } from '../version';
 
@@ -45,10 +51,13 @@ export function CapturePage({ onSaved, onReview }: CapturePageProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const avatarRef = useRef<UnityAvatarStageHandle | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const audioRecorderRef = useRef<MediaRecorder | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const avatarRecordingStreamRef = useRef<MediaStream | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
+  const audioChunksRef = useRef<BlobPart[]>([]);
+  const audioDoneRef = useRef<Promise<Blob | null> | null>(null);
   const timerRef = useRef<number | undefined>();
   const faceTimerRef = useRef<number | undefined>();
   const faceBusyRef = useRef(false);
@@ -142,6 +151,8 @@ export function CapturePage({ onSaved, onReview }: CapturePageProps) {
     }
 
     chunksRef.current = [];
+    audioChunksRef.current = [];
+    audioDoneRef.current = null;
     faceTraceRef.current = [];
     transcriptRef.current = '';
     transcriptCuesRef.current = [];
@@ -161,6 +172,10 @@ export function CapturePage({ onSaved, onReview }: CapturePageProps) {
     };
     recorder.onstop = async () => {
       stopSpeechDraft();
+      if (audioRecorderRef.current?.state === 'recording') {
+        audioRecorderRef.current.stop();
+      }
+      const audioBlob = (await audioDoneRef.current?.catch(() => null)) ?? null;
       cleanupAvatarRecordingStream();
       const firstChunk = chunksRef.current[0] as Blob | undefined;
       const blob = new Blob(chunksRef.current, { type: mimeType || firstChunk?.type || 'video/webm' });
@@ -170,8 +185,10 @@ export function CapturePage({ onSaved, onReview }: CapturePageProps) {
       if (duration > 0) {
         setElapsedSec(duration);
       }
-      await processAndSaveEpisode(blob, duration || wallClockDuration || elapsedSecRef.current);
+      await processAndSaveEpisode(blob, duration || wallClockDuration || elapsedSecRef.current, audioBlob);
     };
+
+    startAudioRecorder(mediaStream);
 
     startedAtRef.current = performance.now();
     lastFaceSampleAtRef.current = 0;
@@ -191,6 +208,9 @@ export function CapturePage({ onSaved, onReview }: CapturePageProps) {
   }
 
   function stopRecording() {
+    if (audioRecorderRef.current?.state === 'recording') {
+      audioRecorderRef.current.stop();
+    }
     if (recorderRef.current?.state === 'recording') {
       recorderRef.current.stop();
     } else {
@@ -204,7 +224,7 @@ export function CapturePage({ onSaved, onReview }: CapturePageProps) {
     }
   }
 
-  async function processAndSaveEpisode(recordedBlob: Blob, durationSec: number) {
+  async function processAndSaveEpisode(recordedBlob: Blob, durationSec: number, audioBlob: Blob | null) {
     try {
       setIsProcessing(true);
       setProcessingProgress(0.05);
@@ -233,6 +253,7 @@ export function CapturePage({ onSaved, onReview }: CapturePageProps) {
         transcriptText,
         transcriptCues: transcriptCuesRef.current,
         faceTrace: faceTraceRef.current,
+        audioBlob,
         durationSec,
         createdAt,
         onProgress: (progress) => setProcessingProgress(0.08 + progress * 0.38)
@@ -248,6 +269,7 @@ export function CapturePage({ onSaved, onReview }: CapturePageProps) {
       await updateEpisode(id, {
         title: draft.title,
         tags: draft.tags,
+        transcriptText: draft.transcriptText ?? transcriptText,
         replayVideoBlobId: encoded.replayVideoBlobId,
         replayLabel: encoded.replayLabel,
         replayStartSec: draft.replayStartSec,
@@ -291,6 +313,45 @@ export function CapturePage({ onSaved, onReview }: CapturePageProps) {
   function cleanupAvatarRecordingStream() {
     avatarRecordingStreamRef.current?.getVideoTracks().forEach((track) => track.stop());
     avatarRecordingStreamRef.current = null;
+  }
+
+  function startAudioRecorder(mediaStream: MediaStream) {
+    const audioTracks = mediaStream.getAudioTracks();
+    if (audioTracks.length === 0) {
+      audioDoneRef.current = Promise.resolve(null);
+      return;
+    }
+
+    try {
+      const audioMimeType = getSupportedAudioMimeType();
+      const audioStream = new MediaStream(audioTracks);
+      const audioRecorder = new MediaRecorder(audioStream, {
+        ...(audioMimeType ? { mimeType: audioMimeType } : {}),
+        audioBitsPerSecond: 32000
+      });
+      audioChunksRef.current = [];
+      audioRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+      audioDoneRef.current = new Promise((resolve) => {
+        audioRecorder.onstop = () => {
+          const firstChunk = audioChunksRef.current[0] as Blob | undefined;
+          if (!audioChunksRef.current.length) {
+            resolve(null);
+            return;
+          }
+          resolve(new Blob(audioChunksRef.current, { type: audioMimeType || firstChunk?.type || 'audio/webm' }));
+        };
+        audioRecorder.onerror = () => resolve(null);
+      });
+      audioRecorderRef.current = audioRecorder;
+      audioRecorder.start(1000);
+    } catch (error) {
+      console.warn('Audio recorder unavailable.', error);
+      audioDoneRef.current = Promise.resolve(null);
+    }
   }
 
   function startSpeechDraft() {
