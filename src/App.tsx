@@ -15,6 +15,7 @@ import { CapturePage } from './pages/CapturePage';
 import { ArchivePage } from './pages/ArchivePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { RigLabPage } from './pages/RigLabPage';
+import { APP_VERSION_LABEL, UNITY_VERSION_LABEL } from './version';
 
 const initialSettings: AppSettings = {
   rewardEnabled: false,
@@ -137,9 +138,12 @@ export default function App() {
           <p className="eyebrow">Research Prototype</p>
           <h1>Rewind</h1>
         </div>
-        <span className={`condition-pill ${settings.rewardEnabled ? 'is-reward' : ''}`}>
-          {settings.rewardEnabled ? 'Reward ON' : 'Reward OFF'}
-        </span>
+        <div className="app-header__actions">
+          <span className={`condition-pill ${settings.rewardEnabled ? 'is-reward' : ''}`}>
+            {settings.rewardEnabled ? 'Reward ON' : 'Reward OFF'}
+          </span>
+          <span className="soft-pill">App {APP_VERSION_LABEL} · Unity {UNITY_VERSION_LABEL}</span>
+        </div>
       </header>
 
       <main className="app-main">

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rewind-shell-v3';
+const CACHE_NAME = 'rewind-shell-v94';
 const BASE_PATH = new URL(self.registration.scope).pathname.replace(/\/$/, '');
 const withBase = (path) => `${BASE_PATH}${path}`;
 const APP_SHELL = [

@@ -169,7 +169,7 @@ async function createMediaPipeTracker(
       const faceLandmarks = faceResult.faceLandmarks?.[0] as Landmark[] | undefined;
       if (faceExpression) {
         faceScaleHistory.push(faceExpression.faceScale);
-        if (faceScaleHistory.length > 7) {
+        if (faceScaleHistory.length > 11) {
           faceScaleHistory.shift();
         }
         smoothedFaceScale = stabilizeFaceScale(median(faceScaleHistory), smoothedFaceScale, faceScaleReady);
@@ -274,7 +274,7 @@ function getFeatureAlpha(key: keyof CatExpression, alpha: number) {
     return clamp(alpha * 1.55, 0.12, 0.62);
   }
   if (key === 'faceScale') {
-    return clamp(alpha * 0.34, 0.05, 0.14);
+    return clamp(alpha * 0.24, 0.04, 0.09);
   }
   if (key.includes('Cover')) {
     return clamp(alpha * 0.86, 0.08, 0.42);
@@ -413,13 +413,13 @@ function stabilizeFaceScale(raw: number, previous: number, ready: boolean) {
   }
 
   const delta = next - previous;
-  if (Math.abs(delta) < 0.035) {
-    return mix(previous, next, 0.025);
+  if (Math.abs(delta) < 0.045) {
+    return mix(previous, next, 0.018);
   }
 
   const maxStep = 0.055;
   const limited = previous + clamp(next - previous, -maxStep, maxStep);
-  return mix(previous, limited, 0.72);
+  return mix(previous, limited, 0.56);
 }
 
 function softenFaceScale(raw: number) {

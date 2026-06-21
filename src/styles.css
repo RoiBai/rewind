@@ -71,6 +71,18 @@ button:disabled {
   margin-bottom: 18px;
 }
 
+.app-header__actions {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+.app-header__actions .soft-pill {
+  min-height: 26px;
+  padding: 0 9px;
+  font-size: 0.68rem;
+}
+
 .eyebrow {
   margin: 0 0 2px;
   color: var(--muted);
@@ -160,6 +172,12 @@ h2 {
 
 .home-hero__header {
   display: grid;
+  gap: 6px;
+}
+
+.home-meta-row {
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 

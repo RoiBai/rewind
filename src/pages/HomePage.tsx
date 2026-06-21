@@ -1,6 +1,7 @@
 import { Archive, ChevronRight, Database, Video } from 'lucide-react';
 import { AppSettings, Episode } from '../types';
 import { TabId } from '../components/TabBar';
+import { APP_VERSION_LABEL, UNITY_VERSION_LABEL } from '../version';
 
 interface HomePageProps {
   episodes: Episode[];
@@ -15,7 +16,11 @@ export function HomePage({ episodes, settings, onNavigate }: HomePageProps) {
     <div className="page-stack home-page">
       <section className="home-hero">
         <div className="home-hero__header">
-          <span className="soft-pill">Mechanism</span>
+          <div className="home-meta-row">
+            <span className="soft-pill">Mechanism</span>
+            <span className="soft-pill">App {APP_VERSION_LABEL}</span>
+            <span className="soft-pill">Unity {UNITY_VERSION_LABEL}</span>
+          </div>
           <h2>Capture. Encode. Replay.</h2>
           <p>Capture regret. Replay it at temptation.</p>
         </div>

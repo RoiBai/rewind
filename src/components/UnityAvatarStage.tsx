@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { CatExpression, neutralExpression } from '../lib/faceTracking';
+import { UNITY_BUILD_VERSION, UNITY_VERSION_LABEL } from '../version';
 
 interface UnityAvatarStageProps {
   expression?: CatExpression;
@@ -48,7 +49,7 @@ interface PosePacket {
 
 const BUILD_ROOT = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/unity/rewind-avatar`;
 const BUILD_NAME = 'rewind-avatar';
-const BUILD_VERSION = 'unity-v92-strong-smooth-avatar-distance-20260621';
+const BUILD_VERSION = UNITY_BUILD_VERSION;
 const UNITY_OBJECT = 'RewindAvatar';
 
 export const UnityAvatarStage = forwardRef<UnityAvatarStageHandle, UnityAvatarStageProps>(function UnityAvatarStage({
@@ -118,7 +119,7 @@ export const UnityAvatarStage = forwardRef<UnityAvatarStageHandle, UnityAvatarSt
             streamingAssetsUrl: `${BUILD_ROOT}/StreamingAssets`,
             companyName: 'CityU Shen Lab',
             productName: 'Rewind Avatar',
-            productVersion: '0.1'
+            productVersion: UNITY_VERSION_LABEL
           },
           (nextProgress) => {
             if (!cancelled) {
@@ -180,7 +181,7 @@ export const UnityAvatarStage = forwardRef<UnityAvatarStageHandle, UnityAvatarSt
           {progress > 0 && <div style={{ width: `${Math.round(progress * 100)}%` }} />}
         </div>
       )}
-      <div className="cat-avatar__badge">{status === 'Unity ready' ? 'Unity ready' : status}</div>
+      <div className="cat-avatar__badge">{status === 'Unity ready' ? `Unity ${UNITY_VERSION_LABEL}` : status}</div>
     </div>
   );
 });

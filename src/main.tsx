@@ -11,9 +11,21 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {
-      // The app still works if service worker registration is unavailable.
+    let refreshed = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshed) {
+        return;
+      }
+      refreshed = true;
+      window.location.reload();
     });
+
+    navigator.serviceWorker
+      .register(`${import.meta.env.BASE_URL}sw.js`)
+      .then((registration) => registration.update())
+      .catch(() => {
+        // The app still works if service worker registration is unavailable.
+      });
   });
 }
 

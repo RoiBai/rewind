@@ -13,6 +13,7 @@ import {
 } from '../lib/faceTracking';
 import { formatDuration, getSupportedVideoMimeType, getVideoDurationFromBlob, stopStream } from '../lib/media';
 import { FaceSample } from '../types';
+import { APP_VERSION_LABEL, UNITY_VERSION_LABEL } from '../version';
 
 interface CapturePageProps {
   onSaved(): void;
@@ -381,6 +382,7 @@ export function CapturePage({ onSaved }: CapturePageProps) {
           <p>{status}</p>
         </div>
         <div className="status-chip-stack">
+          <span className="soft-pill">App {APP_VERSION_LABEL} · Unity {UNITY_VERSION_LABEL}</span>
           <span className="soft-pill">{trackerStatus}</span>
           {trackerStatus !== 'Face tracking idle' && trackerStatus !== 'Starting tracker' && (
             <span className="soft-pill">
