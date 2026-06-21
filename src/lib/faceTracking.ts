@@ -155,6 +155,9 @@ async function createMediaPipeTracker(
   let cachedHands = emptyHandExpression().values;
   let smoothedHands = emptyHandExpression().values;
   let latestHandsPresent = false;
+  let smoothedFaceScale = 0;
+  let faceScaleReady = false;
+  let lastFaceScaleAt = 0;
 
   return {
     source: attempt.source,
@@ -163,6 +166,15 @@ async function createMediaPipeTracker(
       const faceResult = landmarker.detectForVideo(video, timeMs);
       const faceExpression = expressionFromResult(faceResult);
       const faceLandmarks = faceResult.faceLandmarks?.[0] as Landmark[] | undefined;
+      if (faceExpression) {
+        smoothedFaceScale = stabilizeFaceScale(faceExpression.faceScale, smoothedFaceScale, faceScaleReady);
+        faceScaleReady = true;
+        lastFaceScaleAt = timeMs;
+        faceExpression.faceScale = smoothedFaceScale;
+      } else if (timeMs - lastFaceScaleAt > 500) {
+        faceScaleReady = false;
+        smoothedFaceScale = 0;
+      }
       let hasHands = false;
       if (handLandmarker && handFrame % 2 === 0) {
         const handExpression = expressionFromHands(handLandmarker.detectForVideo(video, timeMs), faceLandmarks);
@@ -257,7 +269,7 @@ function getFeatureAlpha(key: keyof CatExpression, alpha: number) {
     return clamp(alpha * 1.55, 0.12, 0.62);
   }
   if (key === 'faceScale') {
-    return clamp(alpha * 1.12, 0.12, 0.46);
+    return clamp(alpha * 0.34, 0.05, 0.14);
   }
   if (key.includes('Cover')) {
     return clamp(alpha * 0.86, 0.08, 0.42);
@@ -387,6 +399,29 @@ function faceScaleFromLandmarks(landmarks: Landmark[]) {
   const faceWidth = distance(leftCheek, rightCheek);
   const faceSize = Math.max(faceHeight, faceWidth * 1.08);
   return clamp((faceSize - 0.44) / 0.28, -1, 1);
+}
+
+function stabilizeFaceScale(raw: number, previous: number, ready: boolean) {
+  const next = softenFaceScale(raw);
+  if (!ready) {
+    return next;
+  }
+
+  const maxStep = 0.04;
+  const limited = previous + clamp(next - previous, -maxStep, maxStep);
+  return mix(limited, next, 0.045);
+}
+
+function softenFaceScale(raw: number) {
+  const value = clamp(raw, -1, 1);
+  const deadband = 0.075;
+  const magnitude = Math.abs(value);
+  if (magnitude < deadband) {
+    return 0;
+  }
+
+  const normalized = (magnitude - deadband) / (1 - deadband);
+  return Math.sign(value) * Math.pow(normalized, 0.92);
 }
 
 function blinkFromLandmarks(landmarks: Landmark[], side: 'left' | 'right') {
