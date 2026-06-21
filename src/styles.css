@@ -1118,6 +1118,28 @@ textarea:focus {
   font-size: 0.82rem;
 }
 
+.remix-caption {
+  gap: 5px;
+  background: linear-gradient(180deg, rgba(23, 20, 18, 0.38), rgba(23, 20, 18, 0.82));
+}
+
+.remix-caption strong {
+  color: #fff6d8;
+  text-transform: uppercase;
+}
+
+.remix-caption span {
+  font-size: 1rem;
+  font-weight: 820;
+  line-height: 1.25;
+}
+
+.remix-caption small {
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 0.72rem;
+  font-weight: 780;
+}
+
 .moment-list {
   display: grid;
   gap: 8px;

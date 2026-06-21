@@ -189,12 +189,23 @@ function ReplayFlow({ episode, videoUrl, settings, onClose, onSettingsChanged }:
   const [watchedFull, setWatchedFull] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [rewardTreats, setRewardTreats] = useState(settings.treats);
+  const [loadedDurationSec, setLoadedDurationSec] = useState(0);
+  const [clipIndex, setClipIndex] = useState(0);
+
+  const effectiveReplayEndSec = getEffectiveReplayEndSec(episode, loadedDurationSec);
+  const clipTimeline = useMemo(() => createReplayTimeline(episode, loadedDurationSec), [episode, loadedDurationSec]);
+  const activeClip = clipTimeline[clipIndex];
 
   useEffect(() => {
     if (step === 'watch' && videoRef.current) {
-      videoRef.current.currentTime = episode.replayStartSec ?? 0;
+      setClipIndex(0);
+      setWatchedFull(false);
+      videoRef.current.currentTime = clipTimeline[0]?.startSec ?? episode.replayStartSec ?? 0;
+      void videoRef.current.play().catch(() => {
+        // Some mobile browsers require one more tap on the video controls.
+      });
     }
-  }, [episode.replayStartSec, step]);
+  }, [clipTimeline, episode.replayStartSec, step]);
 
   async function saveLog() {
     setIsSaving(true);
@@ -221,11 +232,34 @@ function ReplayFlow({ episode, videoUrl, settings, onClose, onSettingsChanged }:
 
   function handleReplayTime() {
     const video = videoRef.current;
-    const end = episode.replayEndSec;
+    const end = activeClip?.endSec ?? effectiveReplayEndSec;
     if (video && end && video.currentTime >= end) {
-      video.pause();
-      setWatchedFull(true);
+      advanceClip();
     }
+  }
+
+  function handleReplayMetadata() {
+    const duration = videoRef.current?.duration ?? 0;
+    setLoadedDurationSec(Number.isFinite(duration) ? duration : 0);
+  }
+
+  function advanceClip() {
+    const video = videoRef.current;
+    if (!video) {
+      return;
+    }
+
+    const nextIndex = clipIndex + 1;
+    if (clipTimeline[nextIndex]) {
+      const nextClip = clipTimeline[nextIndex];
+      setClipIndex(nextIndex);
+      video.currentTime = nextClip.startSec;
+      void video.play().catch(() => undefined);
+      return;
+    }
+
+    video.pause();
+    setWatchedFull(true);
   }
 
   return (
@@ -252,13 +286,17 @@ function ReplayFlow({ episode, videoUrl, settings, onClose, onSettingsChanged }:
                 src={videoUrl}
                 controls
                 playsInline
+                onLoadedMetadata={handleReplayMetadata}
                 onTimeUpdate={handleReplayTime}
-                onEnded={() => setWatchedFull(true)}
+                onEnded={advanceClip}
               />
-              {episode.aiSummary && (
-                <div className="short-caption">
-                  <strong>{episode.aiSummary.topic}</strong>
-                  <span>{episode.aiSummary.moments[1]?.quote ?? episode.aiSummary.summary}</span>
+              {activeClip && (
+                <div className="short-caption remix-caption">
+                  <strong>{activeClip.label}</strong>
+                  <span>{activeClip.quote}</span>
+                  <small>
+                    Clip {Math.min(clipIndex + 1, clipTimeline.length)}/{clipTimeline.length}
+                  </small>
                 </div>
               )}
             </div>
@@ -324,6 +362,104 @@ function ReplayFlow({ episode, videoUrl, settings, onClose, onSettingsChanged }:
       </section>
     </div>
   );
+}
+
+function getEffectiveReplayEndSec(episode: Episode, loadedDurationSec: number) {
+  const plannedEnd = episode.replayEndSec ?? 0;
+  const knownDuration = Math.max(
+    Number.isFinite(loadedDurationSec) ? loadedDurationSec : 0,
+    Number.isFinite(episode.durationSec) ? episode.durationSec : 0
+  );
+
+  if (!plannedEnd) {
+    return knownDuration > 0 ? Math.min(knownDuration, 35) : undefined;
+  }
+
+  if (plannedEnd < 5) {
+    return knownDuration >= 5 ? Math.min(knownDuration, 35) : undefined;
+  }
+
+  return plannedEnd;
+}
+
+interface ReplayClip {
+  id: string;
+  startSec: number;
+  endSec: number;
+  label: string;
+  quote: string;
+  intensity: number;
+}
+
+function createReplayTimeline(episode: Episode, loadedDurationSec: number): ReplayClip[] {
+  const duration = Math.max(
+    Number.isFinite(loadedDurationSec) ? loadedDurationSec : 0,
+    Number.isFinite(episode.durationSec) ? episode.durationSec : 0
+  );
+  const maxEnd = duration > 0 ? duration : Math.max(episode.replayEndSec ?? 0, 0);
+  const moments = episode.replaySegments ?? [];
+
+  const clips = moments
+    .map((moment) => {
+      const startSec = clampNumber(moment.startSec, 0, Math.max(maxEnd - 0.8, 0));
+      const endSec = clampNumber(moment.endSec, startSec + 1.2, maxEnd || startSec + 8);
+      return {
+        id: moment.id,
+        startSec: roundClipTime(startSec),
+        endSec: roundClipTime(Math.min(endSec, startSec + 8)),
+        label: moment.label,
+        quote: moment.quote,
+        intensity: moment.intensity
+      };
+    })
+    .filter((clip) => clip.endSec - clip.startSec >= 1);
+
+  if (clips.length === 0) {
+    const fallbackEnd = getEffectiveReplayEndSec(episode, loadedDurationSec) ?? Math.min(maxEnd || 12, 35);
+    return [
+      {
+        id: 'fallback-replay',
+        startSec: maxEnd > 8 ? 2 : 0,
+        endSec: Math.max(2, fallbackEnd),
+        label: episode.aiSummary?.topic ?? 'Replay',
+        quote: episode.aiSummary?.summary ?? episode.title,
+        intensity: 0.6
+      }
+    ];
+  }
+
+  const strongestIndex = clips.reduce(
+    (bestIndex, clip, index) => (clip.intensity > clips[bestIndex].intensity ? index : bestIndex),
+    0
+  );
+  const timeline: ReplayClip[] = [];
+
+  clips.slice(0, 3).forEach((clip, index) => {
+    timeline.push(clip);
+    if (index === strongestIndex) {
+      timeline.push({
+        ...clip,
+        id: `${clip.id}-repeat`,
+        label: `${clip.label} · Repeat`
+      });
+    }
+  });
+
+  return timeline.slice(0, 4);
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+  if (max <= min) {
+    return min;
+  }
+  return Math.min(Math.max(value, min), max);
+}
+
+function roundClipTime(value: number) {
+  return Math.round(value * 10) / 10;
 }
 
 interface SliderProps {

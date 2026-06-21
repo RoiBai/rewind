@@ -2,7 +2,7 @@ import { Camera, CircleStop, Loader2, Play, RotateCcw, Video } from 'lucide-reac
 import { useEffect, useRef, useState } from 'react';
 import { UnityAvatarStage, type UnityAvatarStageHandle } from '../components/UnityAvatarStage';
 import { createId, getErrorDetail, putVideoBlob, saveEpisode, updateEpisode } from '../db';
-import { createEpisodeDraft, createReplayClipPlaceholder } from '../lib/encoding';
+import { createEpisodeDraft, createReplayClipPlaceholder, TranscriptCue } from '../lib/encoding';
 import {
   CatExpression,
   createFaceTracker,
@@ -57,11 +57,13 @@ export function CapturePage({ onSaved, onReview }: CapturePageProps) {
   const trackerRef = useRef<FaceTracker | null>(null);
   const expressionRef = useRef<CatExpression>(neutralExpression);
   const startedAtRef = useRef(0);
+  const elapsedSecRef = useRef(0);
   const lastFaceSampleAtRef = useRef(0);
   const lastFaceVideoTimeRef = useRef(-1);
   const faceTraceRef = useRef<FaceSample[]>([]);
   const recordingRef = useRef(false);
   const transcriptRef = useRef('');
+  const transcriptCuesRef = useRef<TranscriptCue[]>([]);
 
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -142,6 +144,8 @@ export function CapturePage({ onSaved, onReview }: CapturePageProps) {
     chunksRef.current = [];
     faceTraceRef.current = [];
     transcriptRef.current = '';
+    transcriptCuesRef.current = [];
+    elapsedSecRef.current = 0;
     setElapsedSec(0);
     setLastEpisodeId('');
     setProcessingProgress(0);
@@ -160,11 +164,13 @@ export function CapturePage({ onSaved, onReview }: CapturePageProps) {
       cleanupAvatarRecordingStream();
       const firstChunk = chunksRef.current[0] as Blob | undefined;
       const blob = new Blob(chunksRef.current, { type: mimeType || firstChunk?.type || 'video/webm' });
-      const duration = (await getVideoDurationFromBlob(blob)) || elapsedSec;
+      const metadataDuration = await getVideoDurationFromBlob(blob);
+      const wallClockDuration = Math.max(0, (performance.now() - startedAtRef.current) / 1000);
+      const duration = Math.max(metadataDuration, wallClockDuration, elapsedSecRef.current, elapsedSec);
       if (duration > 0) {
         setElapsedSec(duration);
       }
-      await processAndSaveEpisode(blob, duration || elapsedSec);
+      await processAndSaveEpisode(blob, duration || wallClockDuration || elapsedSecRef.current);
     };
 
     startedAtRef.current = performance.now();
@@ -176,7 +182,9 @@ export function CapturePage({ onSaved, onReview }: CapturePageProps) {
     recorder.start(1000);
 
     timerRef.current = window.setInterval(() => {
-      setElapsedSec((performance.now() - startedAtRef.current) / 1000);
+      const nextElapsed = (performance.now() - startedAtRef.current) / 1000;
+      elapsedSecRef.current = nextElapsed;
+      setElapsedSec(nextElapsed);
     }, 300);
 
     void startFaceLoop();
@@ -223,6 +231,8 @@ export function CapturePage({ onSaved, onReview }: CapturePageProps) {
 
       const draft = await createEpisodeDraft({
         transcriptText,
+        transcriptCues: transcriptCuesRef.current,
+        faceTrace: faceTraceRef.current,
         durationSec,
         createdAt,
         onProgress: (progress) => setProcessingProgress(0.08 + progress * 0.38)
@@ -297,10 +307,17 @@ export function CapturePage({ onSaved, onReview }: CapturePageProps) {
       recognition.lang = navigator.language || 'en-US';
       recognition.onresult = (event) => {
         const parts: string[] = [];
-        for (let index = 0; index < event.results.length; index += 1) {
+        for (let index = event.resultIndex; index < event.results.length; index += 1) {
           const result = event.results[index];
           if (result?.isFinal) {
-            parts.push(result[0].transcript);
+            const text = result[0].transcript.trim();
+            if (text) {
+              parts.push(text);
+              transcriptCuesRef.current.push({
+                text,
+                tSec: Math.max(0, (performance.now() - startedAtRef.current) / 1000)
+              });
+            }
           }
         }
         if (parts.length) {
@@ -413,9 +430,11 @@ export function CapturePage({ onSaved, onReview }: CapturePageProps) {
   function resetForAnotherEpisode() {
     setLastEpisodeId('');
     setElapsedSec(0);
+    elapsedSecRef.current = 0;
     setProcessingProgress(0);
     setStatus(cameraStreamRef.current ? 'Camera connected' : 'Ready for a new episode');
     transcriptRef.current = '';
+    transcriptCuesRef.current = [];
     faceTraceRef.current = [];
   }
 
