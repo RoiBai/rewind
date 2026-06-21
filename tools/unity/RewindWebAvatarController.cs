@@ -13,8 +13,8 @@ public sealed class RewindWebAvatarController : MonoBehaviour
     public float headPitchDegrees = 34f;
     public float headRollDegrees = 22f;
     public float smoothing = 12f;
-    public float closeFaceZoom = 0.28f;
-    public float farFaceZoom = 0.16f;
+    public float closeFaceZoom = 0.82f;
+    public float farFaceZoom = 0.28f;
 
     private readonly TrackingPacket target = new TrackingPacket();
     private readonly TrackingPacket current = new TrackingPacket();
@@ -648,8 +648,8 @@ public sealed class RewindWebAvatarController : MonoBehaviour
             : 1f - -proximity * farFaceZoom;
         catRoot.transform.localScale = Vector3.Lerp(
             catRoot.transform.localScale,
-            baseAvatarScale * Mathf.Clamp(avatarScale, 0.84f, 1.30f),
-            1f - Mathf.Exp(-5.5f * Time.deltaTime));
+            baseAvatarScale * Mathf.Clamp(avatarScale, 0.72f, 1.86f),
+            1f - Mathf.Exp(-4.8f * Time.deltaTime));
     }
 
     private void ApplyHands()
@@ -1214,7 +1214,7 @@ public sealed class RewindWebAvatarController : MonoBehaviour
 
         public void LerpTo(TrackingPacket other, float alpha)
         {
-            var framingAlpha = Mathf.Clamp01(alpha * 0.36f);
+            var framingAlpha = Mathf.Clamp01(alpha * 0.28f);
             mouthOpen = Mathf.Lerp(mouthOpen, other.mouthOpen, alpha);
             mouthPucker = Mathf.Lerp(mouthPucker, other.mouthPucker, alpha);
             mouthWide = Mathf.Lerp(mouthWide, other.mouthWide, alpha);

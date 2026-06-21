@@ -48,7 +48,7 @@ interface PosePacket {
 
 const BUILD_ROOT = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/unity/rewind-avatar`;
 const BUILD_NAME = 'rewind-avatar';
-const BUILD_VERSION = 'unity-v91-smooth-avatar-distance-20260621';
+const BUILD_VERSION = 'unity-v92-strong-smooth-avatar-distance-20260621';
 const UNITY_OBJECT = 'RewindAvatar';
 
 export const UnityAvatarStage = forwardRef<UnityAvatarStageHandle, UnityAvatarStageProps>(function UnityAvatarStage({

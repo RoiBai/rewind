@@ -158,6 +158,7 @@ async function createMediaPipeTracker(
   let smoothedFaceScale = 0;
   let faceScaleReady = false;
   let lastFaceScaleAt = 0;
+  const faceScaleHistory: number[] = [];
 
   return {
     source: attempt.source,
@@ -167,13 +168,17 @@ async function createMediaPipeTracker(
       const faceExpression = expressionFromResult(faceResult);
       const faceLandmarks = faceResult.faceLandmarks?.[0] as Landmark[] | undefined;
       if (faceExpression) {
-        smoothedFaceScale = stabilizeFaceScale(faceExpression.faceScale, smoothedFaceScale, faceScaleReady);
+        faceScaleHistory.push(faceExpression.faceScale);
+        if (faceScaleHistory.length > 7) {
+          faceScaleHistory.shift();
+        }
+        smoothedFaceScale = stabilizeFaceScale(median(faceScaleHistory), smoothedFaceScale, faceScaleReady);
         faceScaleReady = true;
         lastFaceScaleAt = timeMs;
         faceExpression.faceScale = smoothedFaceScale;
-      } else if (timeMs - lastFaceScaleAt > 500) {
-        faceScaleReady = false;
-        smoothedFaceScale = 0;
+      } else if (timeMs - lastFaceScaleAt > 1200) {
+        smoothedFaceScale = mix(smoothedFaceScale, 0, 0.025);
+        faceScaleHistory.length = 0;
       }
       let hasHands = false;
       if (handLandmarker && handFrame % 2 === 0) {
@@ -189,7 +194,7 @@ async function createMediaPipeTracker(
         return null;
       }
       return {
-        ...(faceExpression ?? neutralExpression),
+        ...(faceExpression ?? { ...neutralExpression, faceScale: smoothedFaceScale }),
         ...smoothedHands
       };
     },
@@ -407,14 +412,19 @@ function stabilizeFaceScale(raw: number, previous: number, ready: boolean) {
     return next;
   }
 
-  const maxStep = 0.04;
+  const delta = next - previous;
+  if (Math.abs(delta) < 0.035) {
+    return mix(previous, next, 0.025);
+  }
+
+  const maxStep = 0.055;
   const limited = previous + clamp(next - previous, -maxStep, maxStep);
-  return mix(limited, next, 0.045);
+  return mix(previous, limited, 0.72);
 }
 
 function softenFaceScale(raw: number) {
   const value = clamp(raw, -1, 1);
-  const deadband = 0.075;
+  const deadband = 0.085;
   const magnitude = Math.abs(value);
   if (magnitude < deadband) {
     return 0;
@@ -422,6 +432,16 @@ function softenFaceScale(raw: number) {
 
   const normalized = (magnitude - deadband) / (1 - deadband);
   return Math.sign(value) * Math.pow(normalized, 0.92);
+}
+
+function median(values: number[]) {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
 }
 
 function blinkFromLandmarks(landmarks: Landmark[], side: 'left' | 'right') {
