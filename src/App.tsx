@@ -31,7 +31,7 @@ export default function App() {
   const [loadError, setLoadError] = useState('');
   const [storageNotice, setStorageNotice] = useState('');
   const [isRecovering, setIsRecovering] = useState(false);
-  const canOpenWithoutStorage = activeTab === 'capture' || activeTab === 'rig';
+  const canOpenWithoutStorage = activeTab === 'home' || activeTab === 'capture' || activeTab === 'rig';
 
   const refreshEpisodes = useCallback(async () => {
     try {
@@ -181,14 +181,16 @@ export default function App() {
               <section className="storage-notice">
                 {activeTab === 'capture'
                   ? 'Capture preview is available. Saving needs local data.'
-                  : 'Rig Lab only. Local data is not loaded.'}
+                  : activeTab === 'rig'
+                    ? 'Rig Lab only. Local data is not loaded.'
+                    : 'Local archive is not loaded yet.'}
               </section>
             )}
             {storageNotice && <section className="storage-notice">{storageNotice}</section>}
             {activeTab === 'home' && (
               <HomePage episodes={episodes} settings={settings} onNavigate={changeTab} />
             )}
-            {activeTab === 'capture' && <CapturePage onSaved={refreshEpisodes} />}
+            {activeTab === 'capture' && <CapturePage onSaved={refreshEpisodes} onReview={() => changeTab('archive')} />}
             {activeTab === 'archive' && (
               <ArchivePage
                 episodes={episodes}

@@ -1,6 +1,7 @@
-import { Archive, ChevronRight, Database, Video } from 'lucide-react';
-import { AppSettings, Episode } from '../types';
+import { Archive, ChevronRight, Clock, Database, Video } from 'lucide-react';
 import { TabId } from '../components/TabBar';
+import { AppSettings, Episode } from '../types';
+import { formatDuration } from '../lib/media';
 import { APP_VERSION_LABEL, UNITY_VERSION_LABEL } from '../version';
 
 interface HomePageProps {
@@ -9,57 +10,48 @@ interface HomePageProps {
   onNavigate(tab: TabId): void;
 }
 
-const assetPath = `${import.meta.env.BASE_URL}illustrations/mechanism_overview.png`;
-
 export function HomePage({ episodes, settings, onNavigate }: HomePageProps) {
+  const latest = episodes[0];
+
   return (
     <div className="page-stack home-page">
-      <section className="home-hero">
-        <div className="home-hero__header">
-          <div className="home-meta-row">
-            <span className="soft-pill">Mechanism</span>
-            <span className="soft-pill">App {APP_VERSION_LABEL}</span>
-            <span className="soft-pill">Unity {UNITY_VERSION_LABEL}</span>
-          </div>
-          <h2>Capture. Encode. Replay.</h2>
+      <section className="home-launch">
+        <div className="home-launch__copy">
+          <span className="soft-pill">Research prototype</span>
+          <h2>What do you need now?</h2>
           <p>Capture regret. Replay it at temptation.</p>
         </div>
-        <div className="mechanism-frame" aria-label="Mechanism overview">
-          <img src={assetPath} alt="Mechanism overview" />
+
+        <div className="home-launch__actions" aria-label="Primary actions">
+          <button className="home-action is-primary" type="button" onClick={() => onNavigate('capture')}>
+            <span>
+              <Video size={20} aria-hidden="true" />
+              Start New Episode
+            </span>
+            <ChevronRight size={19} aria-hidden="true" />
+          </button>
+          <button className="home-action" type="button" onClick={() => onNavigate('archive')}>
+            <span>
+              <Archive size={20} aria-hidden="true" />
+              Review Episode
+            </span>
+            <ChevronRight size={19} aria-hidden="true" />
+          </button>
         </div>
       </section>
 
-      <section className="home-actions" aria-label="Primary actions">
-        <button className="home-action is-primary" type="button" onClick={() => onNavigate('capture')}>
-          <span>
-            <Video size={19} aria-hidden="true" />
-            Capture
-          </span>
-          <ChevronRight size={18} aria-hidden="true" />
-        </button>
-        <button className="home-action" type="button" onClick={() => onNavigate('archive')}>
-          <span>
-            <Archive size={19} aria-hidden="true" />
-            Archive
-          </span>
-          <ChevronRight size={18} aria-hidden="true" />
-        </button>
-      </section>
-
-      <section className="flow-strip" aria-label="Study flow">
-        <div>
-          <span>01</span>
-          <strong>Capture</strong>
-        </div>
-        <div>
-          <span>02</span>
-          <strong>Encode</strong>
-        </div>
-        <div>
-          <span>03</span>
-          <strong>Replay</strong>
-        </div>
-      </section>
+      {latest && (
+        <section className="panel latest-episode">
+          <div>
+            <span className="muted-label">Latest</span>
+            <h2>{latest.title}</h2>
+            <p>{latest.aiSummary?.topic ?? latest.tags[0] ?? 'Saved episode'}</p>
+          </div>
+          <button className="secondary-button compact-button" type="button" onClick={() => onNavigate('archive')}>
+            Review
+          </button>
+        </section>
+      )}
 
       <section className="home-status">
         <div className="status-tile">
@@ -68,9 +60,9 @@ export function HomePage({ episodes, settings, onNavigate }: HomePageProps) {
           <small>Episodes</small>
         </div>
         <div className="status-tile">
-          <span className="treat-dot" aria-hidden="true" />
-          <span>{settings.treats}</span>
-          <small>Treats</small>
+          <Clock size={18} aria-hidden="true" />
+          <span>{latest ? formatDuration(latest.durationSec) : '0:00'}</span>
+          <small>Latest</small>
         </div>
         <div className="study-card">
           <small>Study Mode</small>
@@ -79,6 +71,12 @@ export function HomePage({ episodes, settings, onNavigate }: HomePageProps) {
             {settings.rewardEnabled ? 'ON' : 'OFF'}
           </span>
         </div>
+      </section>
+
+      <section className="panel install-note">
+        <span className="muted-label">Home screen</span>
+        <p>Add Rewind from Safari or Chrome share menu.</p>
+        <span className="soft-pill">App {APP_VERSION_LABEL} · Unity {UNITY_VERSION_LABEL}</span>
       </section>
     </div>
   );

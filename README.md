@@ -6,15 +6,30 @@ Mobile-first PWA prototype for an HCI study.
 
 ## What Works
 
-- Affective capture with title, tags, notes, video, and audio.
+- Home-screen workflow: Start New Episode or Review Episode.
+- Cat-only affective capture with avatar video and user voice.
+- Camera preview is hidden and used only for tracking.
 - Unity WebGL cat avatar during recording.
 - MediaPipe face + hand tracking hook with a graceful fallback.
 - Local episode archive in IndexedDB.
-- Stubbed replay encoding pipeline.
-- Temptation replay with pre/post urge sliders.
+- Stubbed AI draft pipeline for title, topic, tags, and replay moments.
+- Review flow with pre/post desire sliders.
 - Reward variant with treat animation and counter.
 - Local JSON export.
 - PWA manifest, service worker, icons, and iOS meta tags.
+
+## User Flow
+
+1. Launch Rewind from the home-screen icon.
+2. Tap Start New Episode.
+3. Connect camera and microphone.
+4. Watch only the cat avatar.
+5. Start Recording.
+6. Speak the regret episode.
+7. Stop.
+8. Rewind saves avatar video + voice locally.
+9. Processing creates a draft title, topic, and 30s replay plan.
+10. Tap Review Episode to watch and log feedback.
 
 ## Run Locally
 
@@ -228,9 +243,11 @@ Recorded videos stay in IndexedDB for the MVP. The metadata export references bl
 
 Current MVP:
 
-- Uses the raw recording as replay media.
-- Stores a 0-60s replay pointer when the recording is longer.
-- Keeps transcript empty until Transcribe Stub is tapped.
+- Uses the avatar canvas recording as replay media.
+- Stores a 0-35s replay pointer for the TikTok-like review clip.
+- Creates a local draft title, topic, tags, summary, and moment list.
+- Uses browser speech recognition when available.
+- Falls back to an empty transcript and placeholder moments.
 
 TODO hook:
 
@@ -238,4 +255,10 @@ TODO hook:
 src/lib/encoding.ts
 ```
 
-Replace `createReplayClipPlaceholder` with transcript, LLM clip selection, and media trimming.
+Replace `createEpisodeDraft` and `createReplayClipPlaceholder` with:
+
+- approved speech-to-text for Chinese and English
+- LLM theme extraction
+- high-intensity sentence selection
+- media trimming or serverless clipping
+- subtitle/caption generation

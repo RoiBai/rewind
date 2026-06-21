@@ -30,5 +30,29 @@
       "form_factor": "narrow",
       "label": "Rewind app capture screen"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Start New Episode",
+      "short_name": "Capture",
+      "url": "./#capture",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Review Episodes",
+      "short_name": "Review",
+      "url": "./#archive",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
   ]
 }

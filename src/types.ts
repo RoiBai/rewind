@@ -11,6 +11,26 @@ export interface FaceSample {
   faceScale?: number;
 }
 
+export interface EpisodeMoment {
+  id: string;
+  startSec: number;
+  endSec: number;
+  label: string;
+  quote: string;
+  intensity: number;
+}
+
+export interface EpisodeAiSummary {
+  title: string;
+  topic: string;
+  summary: string;
+  language: 'zh' | 'en' | 'mixed' | 'unknown';
+  suggestedTags: string[];
+  moments: EpisodeMoment[];
+  generatedAt: string;
+  pipeline: 'local-stub';
+}
+
 export interface Episode {
   id: string;
   createdAt: string;
@@ -25,6 +45,8 @@ export interface Episode {
   replayLabel: string;
   replayStartSec?: number;
   replayEndSec?: number;
+  aiSummary?: EpisodeAiSummary;
+  replaySegments?: EpisodeMoment[];
   faceTrace?: FaceSample[];
 }
 

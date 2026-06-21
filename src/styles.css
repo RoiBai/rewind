@@ -152,6 +152,34 @@ h2 {
   gap: 12px;
 }
 
+.home-launch {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.home-launch__copy {
+  display: grid;
+  gap: 8px;
+}
+
+.home-launch__copy h2 {
+  font-size: 1.7rem;
+  line-height: 1.05;
+}
+
+.home-launch__copy p,
+.install-note p {
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.home-launch__actions {
+  display: grid;
+  gap: 10px;
+}
+
+.home-launch,
 .home-hero,
 .home-action,
 .flow-strip,
@@ -221,8 +249,8 @@ h2 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 58px;
-  padding: 0 12px;
+  min-height: 64px;
+  padding: 0 14px;
   color: var(--ink);
   font-weight: 780;
 }
@@ -276,6 +304,19 @@ h2 {
   grid-template-columns: 0.9fr 0.9fr 1.25fr;
   gap: 0;
   overflow: hidden;
+}
+
+.latest-episode {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.install-note {
+  gap: 7px;
+}
+
+.install-note .soft-pill {
+  justify-self: start;
 }
 
 .status-tile,
@@ -519,6 +560,52 @@ textarea:focus {
   gap: 12px;
 }
 
+.capture-flow {
+  gap: 12px;
+}
+
+.capture-start,
+.capture-status-panel {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.avatar-capture-shell {
+  position: relative;
+}
+
+.capture-avatar-stage {
+  min-height: min(42vh, 360px);
+}
+
+.capture-avatar-stage .cat-avatar__stage,
+.capture-avatar-stage .unity-avatar__canvas {
+  min-height: min(42vh, 360px);
+}
+
+.tracking-video-hidden {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transform: scaleX(-1);
+}
+
+.capture-actions {
+  display: grid;
+  grid-template-columns: 1fr 0.42fr;
+  gap: 10px;
+}
+
+.capture-ready-card {
+  text-align: center;
+}
+
+.capture-ready-card .primary-button {
+  margin-top: 2px;
+}
+
 .camera-panel,
 .cat-avatar {
   position: relative;
@@ -744,6 +831,77 @@ textarea:focus {
 
 .detail-panel {
   gap: 14px;
+}
+
+.short-video-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #171412;
+}
+
+.short-video-frame .replay-video {
+  display: block;
+  border-radius: 8px;
+}
+
+.short-video-frame.is-modal .replay-video {
+  max-height: 62vh;
+}
+
+.short-caption {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  left: 10px;
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: rgba(23, 20, 18, 0.72);
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.short-caption strong {
+  font-size: 0.96rem;
+}
+
+.short-caption span {
+  font-size: 0.82rem;
+}
+
+.moment-list {
+  display: grid;
+  gap: 8px;
+}
+
+.moment-list div {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f6efe4;
+}
+
+.moment-list span {
+  color: var(--teal);
+  font-size: 0.76rem;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.moment-list p {
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.moment-list small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 720;
 }
 
 .video-placeholder {

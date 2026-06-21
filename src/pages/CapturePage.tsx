@@ -1,8 +1,8 @@
-import { Camera, CircleStop, Save, Video } from 'lucide-react';
+import { Camera, CircleStop, Loader2, Play, RotateCcw, Video } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { UnityAvatarStage, type UnityAvatarStageHandle } from '../components/UnityAvatarStage';
 import { createId, getErrorDetail, putVideoBlob, saveEpisode, updateEpisode } from '../db';
-import { createReplayClipPlaceholder } from '../lib/encoding';
+import { createEpisodeDraft, createReplayClipPlaceholder } from '../lib/encoding';
 import {
   CatExpression,
   createFaceTracker,
@@ -16,15 +16,38 @@ import { FaceSample } from '../types';
 import { APP_VERSION_LABEL, UNITY_VERSION_LABEL } from '../version';
 
 interface CapturePageProps {
-  onSaved(): void;
+  onSaved(episodeId?: string): void | Promise<void>;
+  onReview(): void;
 }
 
-export function CapturePage({ onSaved }: CapturePageProps) {
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+
+interface SpeechRecognitionEventLike {
+  resultIndex: number;
+  results: ArrayLike<{
+    isFinal: boolean;
+    0: { transcript: string };
+  }>;
+}
+
+export function CapturePage({ onSaved, onReview }: CapturePageProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const avatarRef = useRef<UnityAvatarStageHandle | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
   const avatarRecordingStreamRef = useRef<MediaStream | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const timerRef = useRef<number | undefined>();
   const faceTimerRef = useRef<number | undefined>();
@@ -38,46 +61,34 @@ export function CapturePage({ onSaved }: CapturePageProps) {
   const lastFaceVideoTimeRef = useRef(-1);
   const faceTraceRef = useRef<FaceSample[]>([]);
   const recordingRef = useRef(false);
+  const transcriptRef = useRef('');
 
-  const [title, setTitle] = useState('');
-  const [tagsInput, setTagsInput] = useState('');
-  const [notes, setNotes] = useState('');
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
-  const [recordedUrl, setRecordedUrl] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [lastEpisodeId, setLastEpisodeId] = useState('');
   const [elapsedSec, setElapsedSec] = useState(0);
-  const [status, setStatus] = useState('Camera off');
-  const [trackerStatus, setTrackerStatus] = useState('Face tracking idle');
+  const [status, setStatus] = useState('Ready for a new episode');
+  const [trackerStatus, setTrackerStatus] = useState('Tracking idle');
+  const [speechStatus, setSpeechStatus] = useState('Voice draft idle');
+  const [processingProgress, setProcessingProgress] = useState(0);
   const [expression, setExpression] = useState<CatExpression>(neutralExpression);
-  const [isEncoding, setIsEncoding] = useState(false);
-  const [encodingProgress, setEncodingProgress] = useState(0);
 
   useEffect(() => {
-    if (!videoRef.current || !stream) {
+    if (!videoRef.current || !cameraStream) {
       return;
     }
-    videoRef.current.srcObject = stream;
-    videoRef.current.play().catch(() => setStatus('Tap video to preview'));
-  }, [stream]);
-
-  useEffect(() => {
-    if (!recordedBlob) {
-      setRecordedUrl('');
-      return undefined;
-    }
-
-    const url = URL.createObjectURL(recordedBlob);
-    setRecordedUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [recordedBlob]);
+    videoRef.current.srcObject = cameraStream;
+    videoRef.current.play().catch(() => setStatus('Tap Connect Camera'));
+  }, [cameraStream]);
 
   useEffect(() => {
     return () => {
       stopRecording();
+      stopSpeechDraft();
       cleanupAvatarRecordingStream();
       stopFaceLoop();
-      stopStream(streamRef.current);
+      stopStream(cameraStreamRef.current);
       if (timerRef.current) {
         window.clearInterval(timerRef.current);
       }
@@ -85,8 +96,8 @@ export function CapturePage({ onSaved }: CapturePageProps) {
   }, []);
 
   async function enableCamera() {
-    if (stream) {
-      return stream;
+    if (cameraStreamRef.current) {
+      return cameraStreamRef.current;
     }
 
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -104,19 +115,14 @@ export function CapturePage({ onSaved }: CapturePageProps) {
       audio: true
     });
 
-    streamRef.current = nextStream;
-    setStream(nextStream);
-    setStatus('Tracking preview');
+    cameraStreamRef.current = nextStream;
+    setCameraStream(nextStream);
+    setStatus('Camera connected');
     void startFaceLoop();
     return nextStream;
   }
 
   async function startRecording() {
-    if (!title.trim()) {
-      setStatus('Add a title');
-      return;
-    }
-
     const mediaStream = await enableCamera();
     const mimeType = getSupportedVideoMimeType();
     if (!('MediaRecorder' in window)) {
@@ -135,8 +141,12 @@ export function CapturePage({ onSaved }: CapturePageProps) {
 
     chunksRef.current = [];
     faceTraceRef.current = [];
-    setRecordedBlob(null);
+    transcriptRef.current = '';
     setElapsedSec(0);
+    setLastEpisodeId('');
+    setProcessingProgress(0);
+    setIsProcessing(false);
+    startSpeechDraft();
 
     const recorder = new MediaRecorder(recordingStream, mimeType ? { mimeType } : undefined);
     recorderRef.current = recorder;
@@ -146,15 +156,15 @@ export function CapturePage({ onSaved }: CapturePageProps) {
       }
     };
     recorder.onstop = async () => {
+      stopSpeechDraft();
       cleanupAvatarRecordingStream();
       const firstChunk = chunksRef.current[0] as Blob | undefined;
       const blob = new Blob(chunksRef.current, { type: mimeType || firstChunk?.type || 'video/webm' });
-      setRecordedBlob(blob);
-      const duration = await getVideoDurationFromBlob(blob);
+      const duration = (await getVideoDurationFromBlob(blob)) || elapsedSec;
       if (duration > 0) {
         setElapsedSec(duration);
       }
-      setStatus('Avatar ready');
+      await processAndSaveEpisode(blob, duration || elapsedSec);
     };
 
     startedAtRef.current = performance.now();
@@ -162,12 +172,12 @@ export function CapturePage({ onSaved }: CapturePageProps) {
     lastFaceVideoTimeRef.current = -1;
     recordingRef.current = true;
     setIsRecording(true);
-    setStatus('Recording avatar');
-    recorder.start(2000);
+    setStatus('Recording cat + voice');
+    recorder.start(1000);
 
     timerRef.current = window.setInterval(() => {
       setElapsedSec((performance.now() - startedAtRef.current) / 1000);
-    }, 500);
+    }, 300);
 
     void startFaceLoop();
   }
@@ -183,6 +193,69 @@ export function CapturePage({ onSaved }: CapturePageProps) {
     if (timerRef.current) {
       window.clearInterval(timerRef.current);
       timerRef.current = undefined;
+    }
+  }
+
+  async function processAndSaveEpisode(recordedBlob: Blob, durationSec: number) {
+    try {
+      setIsProcessing(true);
+      setProcessingProgress(0.05);
+      setStatus('Processing episode');
+
+      const createdAt = new Date();
+      const transcriptText = transcriptRef.current.trim();
+      const rawVideoBlobId = await putVideoBlob(recordedBlob, 'raw-video');
+      const id = createId('episode');
+
+      await saveEpisode({
+        id,
+        createdAt: createdAt.toISOString(),
+        title: 'Processing episode',
+        tags: ['processing'],
+        rawVideoBlobId,
+        replayVideoBlobId: rawVideoBlobId,
+        durationSec: Math.round(durationSec),
+        transcriptText,
+        encodingStatus: 'encoding',
+        replayLabel: 'processing avatar capture',
+        faceTrace: faceTraceRef.current
+      });
+
+      const draft = await createEpisodeDraft({
+        transcriptText,
+        durationSec,
+        createdAt,
+        onProgress: (progress) => setProcessingProgress(0.08 + progress * 0.38)
+      });
+
+      const encoded = await createReplayClipPlaceholder({
+        rawVideoBlobId,
+        durationSec,
+        targetDurationSec: draft.replayEndSec,
+        onProgress: (progress) => setProcessingProgress(0.5 + progress * 0.46)
+      });
+
+      await updateEpisode(id, {
+        title: draft.title,
+        tags: draft.tags,
+        replayVideoBlobId: encoded.replayVideoBlobId,
+        replayLabel: encoded.replayLabel,
+        replayStartSec: draft.replayStartSec,
+        replayEndSec: draft.replayEndSec,
+        aiSummary: draft.aiSummary,
+        replaySegments: draft.replaySegments,
+        encodingStatus: 'ready'
+      });
+
+      setProcessingProgress(1);
+      setStatus('Episode ready');
+      setLastEpisodeId(id);
+      await onSaved(id);
+    } catch (error) {
+      console.warn('Rewind capture save failed.', error);
+      setStatus(`Local save failed: ${getErrorDetail(error)}`);
+    } finally {
+      setIsProcessing(false);
     }
   }
 
@@ -208,6 +281,63 @@ export function CapturePage({ onSaved }: CapturePageProps) {
   function cleanupAvatarRecordingStream() {
     avatarRecordingStreamRef.current?.getVideoTracks().forEach((track) => track.stop());
     avatarRecordingStreamRef.current = null;
+  }
+
+  function startSpeechDraft() {
+    const Ctor = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    if (!Ctor) {
+      setSpeechStatus('Voice draft unavailable');
+      return;
+    }
+
+    try {
+      const recognition = new Ctor();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = navigator.language || 'en-US';
+      recognition.onresult = (event) => {
+        const parts: string[] = [];
+        for (let index = 0; index < event.results.length; index += 1) {
+          const result = event.results[index];
+          if (result?.isFinal) {
+            parts.push(result[0].transcript);
+          }
+        }
+        if (parts.length) {
+          transcriptRef.current = `${transcriptRef.current} ${parts.join(' ')}`.trim();
+          setSpeechStatus('Voice draft on');
+        }
+      };
+      recognition.onerror = () => setSpeechStatus('Voice draft skipped');
+      recognition.onend = () => {
+        if (recordingRef.current) {
+          try {
+            recognition.start();
+          } catch {
+            setSpeechStatus('Voice draft paused');
+          }
+        }
+      };
+      recognition.start();
+      recognitionRef.current = recognition;
+      setSpeechStatus('Voice draft on');
+    } catch {
+      setSpeechStatus('Voice draft skipped');
+    }
+  }
+
+  function stopSpeechDraft() {
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    if (!recognition) {
+      return;
+    }
+    recognition.onend = null;
+    try {
+      recognition.stop();
+    } catch {
+      // Speech recognition stop is best-effort across mobile browsers.
+    }
   }
 
   function stopFaceLoop() {
@@ -280,103 +410,36 @@ export function CapturePage({ onSaved }: CapturePageProps) {
     tick();
   }
 
-  async function saveCurrentEpisode() {
-    if (!recordedBlob || !title.trim()) {
-      setStatus('Missing recording');
-      return;
-    }
-
-    try {
-      setIsEncoding(true);
-      setEncodingProgress(0.08);
-      setStatus('Encoding...');
-
-      const duration = (await getVideoDurationFromBlob(recordedBlob)) || elapsedSec;
-      const rawVideoBlobId = await putVideoBlob(recordedBlob, 'raw-video');
-      const id = createId('episode');
-
-      await saveEpisode({
-        id,
-        createdAt: new Date().toISOString(),
-        title: title.trim(),
-        tags: parseTags(tagsInput),
-        notes: notes.trim() || undefined,
-        rawVideoBlobId,
-        replayVideoBlobId: rawVideoBlobId,
-        durationSec: Math.round(duration),
-        transcriptText: '',
-        encodingStatus: 'encoding',
-        replayLabel: 'raw capture',
-        faceTrace: faceTraceRef.current
-      });
-
-      const encoded = await createReplayClipPlaceholder({
-        rawVideoBlobId,
-        durationSec: duration,
-        onProgress: setEncodingProgress
-      });
-
-      await updateEpisode(id, {
-        replayVideoBlobId: encoded.replayVideoBlobId,
-        replayLabel: encoded.replayLabel,
-        replayStartSec: encoded.replayStartSec,
-        replayEndSec: encoded.replayEndSec,
-        encodingStatus: 'ready'
-      });
-
-      setEncodingProgress(1);
-      setStatus('Saved');
-      setTitle('');
-      setTagsInput('');
-      setNotes('');
-      setRecordedBlob(null);
-      faceTraceRef.current = [];
-      onSaved();
-    } catch (error) {
-      console.warn('Rewind capture save failed.', error);
-      setStatus(`Local save failed: ${getErrorDetail(error)}`);
-    } finally {
-      setIsEncoding(false);
-    }
+  function resetForAnotherEpisode() {
+    setLastEpisodeId('');
+    setElapsedSec(0);
+    setProcessingProgress(0);
+    setStatus(cameraStreamRef.current ? 'Camera connected' : 'Ready for a new episode');
+    transcriptRef.current = '';
+    faceTraceRef.current = [];
   }
 
   return (
-    <div className="page-stack">
-      <section className="panel form-panel">
-        <label>
-          <span>Title</span>
-          <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Regret episode" required />
-        </label>
-        <label>
-          <span>Tags</span>
-          <input value={tagsInput} onChange={(event) => setTagsInput(event.target.value)} placeholder="snack, scrolling" />
-        </label>
-        <label>
-          <span>Notes</span>
-          <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Optional" rows={2} />
-        </label>
+    <div className="page-stack capture-flow">
+      <section className="capture-start panel">
+        <div>
+          <h2>New Episode</h2>
+          <p>Cat avatar + your voice.</p>
+        </div>
+        <span className="soft-pill">No face video saved</span>
       </section>
 
-      <section className="capture-grid">
-        <div className="camera-panel">
-          <video ref={videoRef} className="camera-preview" muted playsInline />
-          {!stream && (
-            <button className="camera-enable" type="button" onClick={() => void enableCamera()}>
-              <Camera size={19} aria-hidden="true" />
-              Enable Camera
-            </button>
-          )}
-          <div className="media-chip">Tracking only</div>
-        </div>
-
+      <section className="avatar-capture-shell">
+        <video ref={videoRef} className="tracking-video-hidden" muted playsInline aria-hidden="true" />
         <UnityAvatarStage
           ref={avatarRef}
+          className="capture-avatar-stage"
           expression={expression}
-          label={isRecording ? 'Recording cat avatar' : 'Unity cat avatar'}
+          label={isRecording ? 'Recording cat avatar' : 'Cat avatar recording view'}
         />
       </section>
 
-      <section className="panel compact-panel">
+      <section className="panel capture-status-panel">
         <div>
           <h2>{formatDuration(elapsedSec)}</h2>
           <p>{status}</p>
@@ -384,81 +447,75 @@ export function CapturePage({ onSaved }: CapturePageProps) {
         <div className="status-chip-stack">
           <span className="soft-pill">App {APP_VERSION_LABEL} · Unity {UNITY_VERSION_LABEL}</span>
           <span className="soft-pill">{trackerStatus}</span>
-          {trackerStatus !== 'Face tracking idle' && trackerStatus !== 'Starting tracker' && (
+          <span className="soft-pill">{speechStatus}</span>
+          {trackerStatus !== 'Tracking idle' && trackerStatus !== 'Starting tracker' && (
             <span className="soft-pill">
               S{expression.smile.toFixed(2)} B{Math.round(expression.blinkLeft * 10)}/
               {Math.round(expression.blinkRight * 10)} M{Math.round(expression.mouthOpen * 10)}
-              {' '}Z{expression.faceScale.toFixed(2)} · G {handGestureLabel(expression, 'left')}/{handGestureLabel(expression, 'right')}
+              {' '}Z{expression.faceScale.toFixed(2)}
             </span>
           )}
         </div>
       </section>
 
-      {recordedUrl && (
-        <section className="panel">
-          <h2>Preview</h2>
-          <video className="replay-video" src={recordedUrl} controls playsInline />
-        </section>
-      )}
-
-      {isEncoding && (
+      {isProcessing && (
         <section className="panel">
           <div className="progress-header">
-            <span>Encoding...</span>
-            <span>{Math.round(encodingProgress * 100)}%</span>
+            <span>Processing</span>
+            <span>{Math.round(processingProgress * 100)}%</span>
           </div>
           <div className="progress-track">
-            <span style={{ width: `${Math.round(encodingProgress * 100)}%` }} />
+            <span style={{ width: `${Math.round(processingProgress * 100)}%` }} />
           </div>
+          <p>Draft title, theme, and 30s replay plan.</p>
         </section>
       )}
 
-      <section className="action-row">
-        {!isRecording ? (
-          <button className="primary-button" type="button" onClick={() => void startRecording()} disabled={isEncoding}>
-            <Video size={19} aria-hidden="true" />
-            Record Avatar
+      {lastEpisodeId && !isProcessing && (
+        <section className="panel capture-ready-card">
+          <h2>Episode Ready</h2>
+          <p>Saved locally. Review anytime.</p>
+          <button className="primary-button full-width" type="button" onClick={onReview}>
+            <Play size={19} aria-hidden="true" />
+            Review Episode
+          </button>
+        </section>
+      )}
+
+      <section className="capture-actions">
+        {!cameraStream ? (
+          <button className="primary-button full-width" type="button" onClick={() => void enableCamera()}>
+            <Camera size={19} aria-hidden="true" />
+            Connect Camera
+          </button>
+        ) : !isRecording ? (
+          <button
+            className="primary-button full-width"
+            type="button"
+            onClick={() => void startRecording()}
+            disabled={isProcessing}
+          >
+            {isProcessing ? <Loader2 size={19} aria-hidden="true" /> : <Video size={19} aria-hidden="true" />}
+            Start Recording
           </button>
         ) : (
-          <button className="danger-button" type="button" onClick={stopRecording}>
+          <button className="danger-button full-width" type="button" onClick={stopRecording}>
             <CircleStop size={19} aria-hidden="true" />
             Stop
           </button>
         )}
-        <button
-          className="secondary-button"
-          type="button"
-          onClick={() => void saveCurrentEpisode()}
-          disabled={!recordedBlob || isRecording || isEncoding}
-        >
-          <Save size={19} aria-hidden="true" />
-          Save Episode
+        <button className="secondary-button full-width" type="button" onClick={resetForAnotherEpisode} disabled={isRecording || isProcessing}>
+          <RotateCcw size={18} aria-hidden="true" />
+          New
         </button>
       </section>
     </div>
   );
 }
 
-function handGestureLabel(expression: CatExpression, side: 'left' | 'right') {
-  const scores: Array<[string, number]> =
-    side === 'left'
-      ? [
-          ['M', expression.leftCoverMouth],
-          ['E', expression.leftCoverEyes],
-          ['H', expression.leftCoverHead]
-        ]
-      : [
-          ['M', expression.rightCoverMouth],
-          ['E', expression.rightCoverEyes],
-          ['H', expression.rightCoverHead]
-        ];
-  const [label, score] = scores.reduce((best, item) => (item[1] > best[1] ? item : best));
-  return score > 0.42 ? label : '-';
-}
-
-function parseTags(value: string) {
-  return value
-    .split(',')
-    .map((tag) => tag.trim())
-    .filter(Boolean);
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionCtor;
+    webkitSpeechRecognition?: SpeechRecognitionCtor;
+  }
 }

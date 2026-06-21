@@ -72,7 +72,7 @@ export function ArchivePage({ episodes, settings, onEpisodesChanged, onSettingsC
     return (
       <section className="empty-state">
         <h2>No episodes yet</h2>
-        <p>Create one in Capture.</p>
+        <p>Start a new episode first.</p>
       </section>
     );
   }
@@ -91,7 +91,7 @@ export function ArchivePage({ episodes, settings, onEpisodesChanged, onSettingsC
             <small>
               {formatDuration(episode.durationSec)} · {new Date(episode.createdAt).toLocaleDateString()}
             </small>
-            <em>{episode.tags.length ? episode.tags.join(', ') : 'untagged'}</em>
+            <em>{episode.aiSummary?.topic ?? (episode.tags.length ? episode.tags.join(', ') : 'untagged')}</em>
           </button>
         ))}
       </section>
@@ -101,21 +101,43 @@ export function ArchivePage({ episodes, settings, onEpisodesChanged, onSettingsC
           <div className="detail-heading">
             <div>
               <h2>{selected.title}</h2>
-              <p>{selected.replayLabel}</p>
+              <p>{selected.aiSummary?.summary ?? selected.replayLabel}</p>
             </div>
             <span className="soft-pill">{selected.encodingStatus}</span>
           </div>
 
-          {videoUrl ? (
-            <video className="replay-video" src={videoUrl} controls playsInline />
-          ) : (
-            <div className="video-placeholder">Loading replay...</div>
-          )}
+          <div className="short-video-frame">
+            {videoUrl ? (
+              <video className="replay-video" src={videoUrl} controls playsInline />
+            ) : (
+              <div className="video-placeholder">Loading replay...</div>
+            )}
+            {selected.aiSummary && (
+              <div className="short-caption">
+                <strong>{selected.aiSummary.topic}</strong>
+                <span>{selected.aiSummary.moments[0]?.quote}</span>
+              </div>
+            )}
+          </div>
 
           <div className="metadata-row">
             <span>{formatDuration(selected.durationSec)}</span>
             <span>{selected.faceTrace?.length ?? 0} face samples</span>
           </div>
+
+          {selected.replaySegments && selected.replaySegments.length > 0 && (
+            <div className="moment-list" aria-label="AI clip plan">
+              {selected.replaySegments.map((moment) => (
+                <div key={moment.id}>
+                  <span>{moment.label}</span>
+                  <p>{moment.quote}</p>
+                  <small>
+                    {formatDuration(moment.startSec)}-{formatDuration(moment.endSec)}
+                  </small>
+                </div>
+              ))}
+            </div>
+          )}
 
           {selected.transcriptText ? (
             <p className="transcript-preview">{selected.transcriptText}</p>
@@ -128,7 +150,7 @@ export function ArchivePage({ episodes, settings, onEpisodesChanged, onSettingsC
 
           <button className="primary-button full-width" type="button" onClick={() => setIsReplayOpen(true)}>
             <Play size={19} aria-hidden="true" />
-            Temptation Replay
+            Review Episode
           </button>
         </section>
       )}
@@ -192,16 +214,25 @@ function ReplayFlow({ episode, videoUrl, settings, onClose, onSettingsChanged }:
     setIsSaving(false);
   }
 
+  function handleReplayTime() {
+    const video = videoRef.current;
+    const end = episode.replayEndSec;
+    if (video && end && video.currentTime >= end) {
+      video.pause();
+      setWatchedFull(true);
+    }
+  }
+
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Temptation replay">
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Episode review">
       <section className="replay-modal">
         {step === 'pre' && (
           <>
-            <h2>Before Replay</h2>
-            <Slider label="Urge now" value={preUrge} onChange={setPreUrge} />
+            <h2>Before Review</h2>
+            <Slider label="Desire now" value={preUrge} onChange={setPreUrge} />
             <button className="primary-button full-width" type="button" onClick={() => setStep('watch')}>
               <Play size={19} aria-hidden="true" />
-              Start Replay
+              Watch
             </button>
           </>
         )}
@@ -209,14 +240,23 @@ function ReplayFlow({ episode, videoUrl, settings, onClose, onSettingsChanged }:
         {step === 'watch' && (
           <>
             <h2>{episode.title}</h2>
-            <video
-              ref={videoRef}
-              className="replay-video"
-              src={videoUrl}
-              controls
-              playsInline
-              onEnded={() => setWatchedFull(true)}
-            />
+            <div className="short-video-frame is-modal">
+              <video
+                ref={videoRef}
+                className="replay-video"
+                src={videoUrl}
+                controls
+                playsInline
+                onTimeUpdate={handleReplayTime}
+                onEnded={() => setWatchedFull(true)}
+              />
+              {episode.aiSummary && (
+                <div className="short-caption">
+                  <strong>{episode.aiSummary.topic}</strong>
+                  <span>{episode.aiSummary.moments[1]?.quote ?? episode.aiSummary.summary}</span>
+                </div>
+              )}
+            </div>
             <button
               className={settings.forceFullWatch ? 'primary-button full-width' : 'secondary-button full-width'}
               type="button"
@@ -231,7 +271,7 @@ function ReplayFlow({ episode, videoUrl, settings, onClose, onSettingsChanged }:
               ) : (
                 <>
                   <SkipForward size={19} aria-hidden="true" />
-                  Skip to Post
+                  Skip to Feedback
                 </>
               )}
             </button>
@@ -240,11 +280,11 @@ function ReplayFlow({ episode, videoUrl, settings, onClose, onSettingsChanged }:
 
         {step === 'post' && (
           <>
-            <h2>After Replay</h2>
-            <Slider label="Urge now" value={postUrge} onChange={setPostUrge} />
+            <h2>After Review</h2>
+            <Slider label="Desire now" value={postUrge} onChange={setPostUrge} />
             <button className="primary-button full-width" type="button" onClick={() => void saveLog()} disabled={isSaving}>
               <Check size={19} aria-hidden="true" />
-              Save Log
+              Save Feedback
             </button>
           </>
         )}
@@ -265,7 +305,7 @@ function ReplayFlow({ episode, videoUrl, settings, onClose, onSettingsChanged }:
 
         {step === 'saved' && (
           <>
-            <h2>Log Saved</h2>
+            <h2>Feedback Saved</h2>
             <p className="modal-note">Local only.</p>
             <button className="primary-button full-width" type="button" onClick={onClose}>
               Done
