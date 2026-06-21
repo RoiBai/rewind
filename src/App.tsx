@@ -132,7 +132,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell app-shell--${activeTab}`}>
       <header className="app-header">
         <div>
           <p className="eyebrow">Research Prototype</p>

@@ -78,7 +78,12 @@ export function ArchivePage({ episodes, settings, onEpisodesChanged, onSettingsC
   }
 
   return (
-    <div className="page-stack">
+    <div className="page-stack review-page">
+      <section className="review-heading">
+        <span className="soft-pill">Review</span>
+        <h2>Previous Episodes</h2>
+      </section>
+
       <section className="episode-list" aria-label="Episodes">
         {episodes.map((episode) => (
           <button

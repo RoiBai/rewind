@@ -419,17 +419,40 @@ export function CapturePage({ onSaved, onReview }: CapturePageProps) {
     faceTraceRef.current = [];
   }
 
-  return (
-    <div className="page-stack capture-flow">
-      <section className="capture-start panel">
-        <div>
-          <h2>New Episode</h2>
-          <p>Cat avatar + your voice.</p>
-        </div>
-        <span className="soft-pill">No face video saved</span>
-      </section>
+  const mainActionLabel = !cameraStream
+    ? 'Connect Camera'
+    : isRecording
+      ? 'Stop Recording'
+      : isProcessing
+        ? 'Processing'
+        : 'Start Recording';
+  const mainActionIcon = !cameraStream ? (
+    <Camera size={26} aria-hidden="true" />
+  ) : isRecording ? (
+    <CircleStop size={27} aria-hidden="true" />
+  ) : isProcessing ? (
+    <Loader2 size={26} aria-hidden="true" />
+  ) : (
+    <Video size={26} aria-hidden="true" />
+  );
 
-      <section className="avatar-capture-shell">
+  function handleMainAction() {
+    if (!cameraStream) {
+      void enableCamera();
+      return;
+    }
+    if (isRecording) {
+      stopRecording();
+      return;
+    }
+    if (!isProcessing) {
+      void startRecording();
+    }
+  }
+
+  return (
+    <div className="capture-flow capture-flow--sketch">
+      <section className="avatar-capture-shell capture-avatar-screen">
         <video ref={videoRef} className="tracking-video-hidden" muted playsInline aria-hidden="true" />
         <UnityAvatarStage
           ref={avatarRef}
@@ -437,6 +460,63 @@ export function CapturePage({ onSaved, onReview }: CapturePageProps) {
           expression={expression}
           label={isRecording ? 'Recording cat avatar' : 'Cat avatar recording view'}
         />
+        <div className="capture-overlay capture-overlay--top">
+          <span className="soft-pill">New Episode</span>
+          <span className="soft-pill">No face video saved</span>
+        </div>
+        <div className="capture-overlay capture-overlay--bottom">
+          <div>
+            <strong>{formatDuration(elapsedSec)}</strong>
+            <span>{status}</span>
+          </div>
+          <span className="soft-pill">{trackerStatus}</span>
+        </div>
+      </section>
+
+      <section className="capture-recorder-card">
+        <div className="capture-recorder-card__meta">
+          <span>{speechStatus}</span>
+          <span>App {APP_VERSION_LABEL} · Unity {UNITY_VERSION_LABEL}</span>
+        </div>
+
+        {isProcessing && (
+          <div className="progress-track">
+            <span style={{ width: `${Math.round(processingProgress * 100)}%` }} />
+          </div>
+        )}
+
+        <button
+          className={`record-orb ${isRecording ? 'is-recording' : ''}`}
+          type="button"
+          onClick={handleMainAction}
+          disabled={isProcessing}
+          aria-label={mainActionLabel}
+        >
+          {mainActionIcon}
+        </button>
+        <strong>{mainActionLabel}</strong>
+
+        {trackerStatus !== 'Tracking idle' && trackerStatus !== 'Starting tracker' && (
+          <span className="soft-pill capture-debug-pill">
+            S{expression.smile.toFixed(2)} B{Math.round(expression.blinkLeft * 10)}/
+            {Math.round(expression.blinkRight * 10)} M{Math.round(expression.mouthOpen * 10)}
+            {' '}Z{expression.faceScale.toFixed(2)}
+          </span>
+        )}
+
+        {lastEpisodeId && !isProcessing && (
+          <button className="primary-button full-width" type="button" onClick={onReview}>
+            <Play size={19} aria-hidden="true" />
+            Review Episode
+          </button>
+        )}
+
+        {lastEpisodeId && !isProcessing && (
+          <button className="secondary-button full-width" type="button" onClick={resetForAnotherEpisode} disabled={isRecording}>
+            <RotateCcw size={18} aria-hidden="true" />
+            New
+          </button>
+        )}
       </section>
 
       <section className="panel capture-status-panel">
