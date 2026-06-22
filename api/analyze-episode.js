@@ -4,7 +4,6 @@ export const config = {
   maxDuration: 60
 };
 
-const OPENAI_BASE_URL = 'https://api.openai.com/v1';
 const MAX_JSON_BYTES = 8 * 1024 * 1024;
 
 export default async function handler(req, res) {
@@ -122,7 +121,7 @@ async function transcribeAudio(payload) {
   formData.append('response_format', 'verbose_json');
   formData.append('timestamp_granularities[]', 'segment');
 
-  const response = await fetch(`${OPENAI_BASE_URL}/audio/transcriptions`, {
+  const response = await fetch(`${getOpenAiBaseUrl()}/audio/transcriptions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
@@ -151,7 +150,7 @@ async function transcribeAudio(payload) {
 
 async function selectClipsWithLlm(input) {
   const model = process.env.OPENAI_CLIP_MODEL || 'gpt-4.1-mini';
-  const response = await fetch(`${OPENAI_BASE_URL}/responses`, {
+  const response = await fetch(`${getOpenAiBaseUrl()}/responses`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -246,7 +245,7 @@ async function selectClipsWithChatCompletion(input) {
     }
   };
 
-  let response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
+  let response = await fetch(`${getOpenAiBaseUrl()}/chat/completions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -256,7 +255,7 @@ async function selectClipsWithChatCompletion(input) {
   });
 
   if (response.status === 400 || response.status === 422) {
-    response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
+    response = await fetch(`${getOpenAiBaseUrl()}/chat/completions`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -316,6 +315,12 @@ function clipPlanSchema() {
       }
     }
   };
+}
+
+function getOpenAiBaseUrl() {
+  const raw = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+  const trimmed = raw.replace(/\/+$/, '');
+  return trimmed.endsWith('/v1') ? trimmed : `${trimmed}/v1`;
 }
 
 function buildLocalClipPlan({ transcriptText, transcriptCues, faceTrace, durationSec, language }) {

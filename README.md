@@ -74,12 +74,14 @@ Environment variables in Vercel:
 
 ```text
 OPENAI_API_KEY=sk-proj-...
+OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_TRANSCRIBE_MODEL=whisper-1
 OPENAI_CLIP_MODEL=gpt-4.1-mini
 REWIND_ALLOWED_ORIGIN=https://www.ruiyuanbai.com
 ```
 
 `OPENAI_API_KEY` is required for real STT/LLM replay planning.
+`OPENAI_BASE_URL` can be changed for an OpenAI-compatible provider. If you enter a root URL such as `https://maimai.it.com`, the API route appends `/v1`.
 
 Use `whisper-1` for transcription because the replay planner needs segment timestamps. The browser sends an audio-only recording to `/api/analyze-episode`; the full avatar video stays local in IndexedDB.
 
