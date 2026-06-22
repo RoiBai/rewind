@@ -6,5 +6,19 @@
     "api/analyze-episode.js": {
       "maxDuration": 60
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/rewind/demo",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/rewind/demo/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/rewind/demo/:path*",
+      "destination": "/:path*"
+    }
+  ]
 }
