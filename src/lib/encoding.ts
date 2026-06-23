@@ -200,10 +200,6 @@ function shouldUseRemoteAi() {
   if (appBase) {
     return true;
   }
-  const configuredBase = import.meta.env.VITE_AI_API_BASE?.trim();
-  if (configuredBase) {
-    return true;
-  }
   return !window.location.hostname.endsWith('github.io');
 }
 
@@ -212,7 +208,7 @@ function getAiApiBase() {
   if (appBase) {
     return `${window.location.origin}${appBase}`;
   }
-  return (import.meta.env.VITE_AI_API_BASE?.trim() ?? '').replace(/\/$/, '');
+  return '';
 }
 
 function getAppBasePath() {

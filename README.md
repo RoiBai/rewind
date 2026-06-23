@@ -113,11 +113,10 @@ https://rewind-demo.vercel.app
 return to the Rewind Vercel project and add:
 
 ```text
-VITE_AI_API_BASE=https://rewind-demo.vercel.app
 VITE_BASE_PATH=/rewind/demo/
 ```
 
-Then redeploy Rewind once so the front-end asset paths and API calls are built for the personal website path.
+Then redeploy Rewind once so the front-end asset paths and same-path API calls are built for the personal website path.
 
 add this to `E:\PersonalWebsite\vercel.json` before the `/(.*)` fallback:
 
