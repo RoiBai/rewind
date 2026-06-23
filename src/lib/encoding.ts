@@ -196,6 +196,10 @@ function normalizeRemoteDraft(data: RemoteEpisodeDraftResponse, input: EpisodeDr
 }
 
 function shouldUseRemoteAi() {
+  const appBase = getAppBasePath();
+  if (appBase) {
+    return true;
+  }
   const configuredBase = import.meta.env.VITE_AI_API_BASE?.trim();
   if (configuredBase) {
     return true;
@@ -204,7 +208,16 @@ function shouldUseRemoteAi() {
 }
 
 function getAiApiBase() {
+  const appBase = getAppBasePath();
+  if (appBase) {
+    return `${window.location.origin}${appBase}`;
+  }
   return (import.meta.env.VITE_AI_API_BASE?.trim() ?? '').replace(/\/$/, '');
+}
+
+function getAppBasePath() {
+  const basePath = import.meta.env.BASE_URL?.replace(/\/$/, '') ?? '';
+  return basePath && basePath !== '/' ? basePath : '';
 }
 
 function blobToBase64(blob: Blob) {
